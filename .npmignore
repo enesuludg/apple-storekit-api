@@ -1,0 +1,29 @@
+# Source
+src/
+examples/
+tests/
+
+# Development files
+*.p8
+.gitignore
+.npmignore
+tsconfig.json
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development example
+example.dev.ts 
