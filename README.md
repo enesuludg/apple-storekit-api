@@ -17,7 +17,7 @@ A TypeScript/JavaScript library for Apple StoreKit API integration. Handles In-A
 ## Installation
 
 ```bash
-npm install @enesuludg/apple-storekit-api
+npm install apple-storekit-api
 ```
 
 ## Requirements
