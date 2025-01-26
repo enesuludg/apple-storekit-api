@@ -9,6 +9,9 @@
     "dist/index.d.ts",
     "dist/appleStoreKit.js",
     "dist/appleStoreKit.d.ts",
+    "dist/interfaces/*",
+    "dist/services/*",
+    "package.json",
     "README.md",
     "LICENSE"
   ],
