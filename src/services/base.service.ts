@@ -83,8 +83,6 @@ export class BaseService {
     data?: any
   ): Promise<T> {
     try {
-      console.log(this.baseUrl)
-      console.log(endpoint)
       const token = this.generateToken();
       const config = {
         headers: {
