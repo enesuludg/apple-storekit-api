@@ -1,4 +1,14 @@
 import { AppleStoreKit } from '../src/appleStoreKit';
+import { 
+  ConsumptionStatus, 
+  Platform, 
+  DeliveryStatus,
+  AccountTenure,
+  PlayTime,
+  LifetimeDollars,
+  UserStatus,
+  RefundPreference 
+} from '../src/interfaces';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -48,18 +58,33 @@ async function example() {
       autoRenewProductId: status.renewalInfo.autoRenewProductId,
       priceIncreaseStatus: status.renewalInfo.priceIncreaseStatus
     });
+    // Get transaction history
+    const history = await storeKit.getTransactionHistory('TRANSACTION_ID');
+    console.log('Transaction History:', history);
 
-    // Get all subscriptions
-    const allSubscriptions = await storeKit.getAllSubscriptions('TRANSACTION_ID');
-    console.log('All Subscriptions:', allSubscriptions);
-
+    // Send consumption information (requires user consent)
+    const consumptionData = {
+      customerConsented: true, // Make sure you have obtained valid consent
+      consumptionStatus: ConsumptionStatus.FULLY_CONSUMED,
+      platform: Platform.APPLE,
+      sampleContentProvided: true,
+      deliveryStatus: DeliveryStatus.DELIVERED_WORKING,
+      appAccountToken: 'YOUR_APP_ACCOUNT_TOKEN', // Optional: UUID for user account
+      accountTenure: AccountTenure.DAYS_180_365,
+      playTime: PlayTime.HOURS_1_6,
+      lifetimeDollarsRefunded: LifetimeDollars.USD_0,
+      lifetimeDollarsPurchased: LifetimeDollars.USD_50_99_99,
+      userStatus: UserStatus.ACTIVE,
+      refundPreference: RefundPreference.NO_PREFERENCE
+    };
+    
+    await storeKit.sendConsumptionInformation('TRANSACTION_ID', consumptionData);
+    console.log('Consumption information sent successfully');
     // Verify purchase
     const purchase = await storeKit.verifyPurchase('TRANSACTION_ID');
     console.log('Purchase Verification:', purchase);
 
-    // Get transaction history
-    const history = await storeKit.getTransactionHistory('TRANSACTION_ID');
-    console.log('Transaction History:', history);
+    
 
     // Look up order information
     const order = await storeKit.lookupOrder('ORDER_ID');

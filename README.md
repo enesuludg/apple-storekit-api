@@ -5,11 +5,11 @@ A TypeScript/JavaScript library for Apple StoreKit API integration. Handles In-A
 ## Features
 
 - Subscription status verification
-- View all subscriptions
 - Purchase verification (using StoreKit 2)
 - Transaction history
 - Order information lookup
 - Refund status checking
+- Consumption information reporting
 - Flexible private key handling (file path or string content)
 - Auto environment detection (production/sandbox)
 - Wide Node.js version support (10.24.1 and above)
@@ -62,10 +62,8 @@ const configWithEnv = {
 const storeKit = new AppleStoreKit(configWithPath); // or configWithContent or configWithEnv
 
 // Check subscription status
-const status = await storeKit.getSubscriptionStatus('originalTransactionId');
+const status = await storeKit.getSubscriptionStatus('original-transaction-id');
 
-// Get all subscriptions
-const subscriptions = await storeKit.getAllSubscriptions('originalTransactionId');
 
 // Verify purchase
 const purchase = await storeKit.verifyPurchase('transactionId');
@@ -159,15 +157,195 @@ The library supports automatic environment detection:
 
 ## API Methods
 
-### Subscriptions
-- `getSubscriptionStatus(originalTransactionId: string)`: Get current subscription status
-- `getAllSubscriptions(originalTransactionId: string)`: Get all subscriptions for a transaction
+### Subscription Status
+
+```typescript
+const status = await storeKit.getSubscriptionStatus('original-transaction-id');
+```
+
+This method returns the current status of a subscription, including:
+- Original transaction ID
+- Status
+- Expiration date
+- Transaction info
+- Renewal info
 
 ### Purchases
 - `verifyPurchase(transactionId: string)`: Verify a specific purchase using StoreKit 2 API
 - `getTransactionHistory(transactionId: string)`: Get transaction history
 - `lookupOrder(orderId: string)`: Look up order details
 - `refundLookup(transactionId: string)`: Check refund status
+
+### Consumption Information
+- `sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information for refund decisions
+
+The `ConsumptionRequest` interface includes required and optional fields with their corresponding enum values:
+
+#### Required Fields:
+```typescript
+{
+  customerConsented: boolean;      // User must consent to data sharing
+  consumptionStatus: ConsumptionStatus;
+  platform: Platform;
+  sampleContentProvided: boolean;
+  deliveryStatus: DeliveryStatus;
+}
+```
+
+#### Optional Fields:
+```typescript
+{
+  appAccountToken?: string;        // UUID for user account
+  accountTenure?: AccountTenure;
+  playTime?: PlayTime;
+  lifetimeDollarsRefunded?: LifetimeDollars;
+  lifetimeDollarsPurchased?: LifetimeDollars;
+  userStatus?: UserStatus;
+  refundPreference?: RefundPreference;
+}
+```
+
+#### Enum Values:
+
+**ConsumptionStatus**
+```typescript
+{
+  UNDECLARED = 0,        // Use to avoid providing information
+  NOT_CONSUMED = 1,      // Not consumed at all
+  PARTIALLY_CONSUMED = 2, // Partially consumed
+  FULLY_CONSUMED = 3     // Fully consumed
+}
+```
+
+**Platform**
+```typescript
+{
+  UNDECLARED = 0,  // Use to avoid providing information
+  APPLE = 1,       // Apple platform
+  NON_APPLE = 2    // Non-Apple platform
+}
+```
+
+**DeliveryStatus**
+```typescript
+{
+  DELIVERED_WORKING = 0,              // Delivered and working properly
+  NOT_DELIVERED_QUALITY_ISSUE = 1,    // Not delivered due to quality issue
+  DELIVERED_WRONG_ITEM = 2,           // Wrong item delivered
+  NOT_DELIVERED_SERVER_OUTAGE = 3,    // Not delivered due to server outage
+  NOT_DELIVERED_CURRENCY_CHANGE = 4,  // Not delivered due to currency change
+  NOT_DELIVERED_OTHER = 5             // Not delivered for other reasons
+}
+```
+
+**AccountTenure**
+```typescript
+{
+  UNDECLARED = 0,     // Use to avoid providing information
+  DAYS_0_3 = 1,       // 0-3 days
+  DAYS_3_10 = 2,      // 3-10 days
+  DAYS_10_30 = 3,     // 10-30 days
+  DAYS_30_90 = 4,     // 30-90 days
+  DAYS_90_180 = 5,    // 90-180 days
+  DAYS_180_365 = 6,   // 180-365 days
+  DAYS_OVER_365 = 7   // Over 365 days
+}
+```
+
+**PlayTime**
+```typescript
+{
+  UNDECLARED = 0,    // Use to avoid providing information
+  MINUTES_0_5 = 1,   // 0-5 minutes
+  MINUTES_5_60 = 2,  // 5-60 minutes
+  HOURS_1_6 = 3,     // 1-6 hours
+  HOURS_6_24 = 4,    // 6-24 hours
+  DAYS_1_4 = 5,      // 1-4 days
+  DAYS_4_16 = 6,     // 4-16 days
+  DAYS_OVER_16 = 7   // Over 16 days
+}
+```
+
+**LifetimeDollars** (for both purchased and refunded)
+```typescript
+{
+  UNDECLARED = 0,        // Use to avoid providing information
+  USD_0 = 1,            // $0
+  USD_0_01_49_99 = 2,   // $0.01-$49.99
+  USD_50_99_99 = 3,     // $50-$99.99
+  USD_100_499_99 = 4,   // $100-$499.99
+  USD_500_999_99 = 5,   // $500-$999.99
+  USD_1000_1999_99 = 6, // $1000-$1999.99
+  USD_OVER_2000 = 7     // Over $2000
+}
+```
+
+**UserStatus**
+```typescript
+{
+  UNDECLARED = 0,      // Use to avoid providing information
+  ACTIVE = 1,          // Account is active
+  SUSPENDED = 2,       // Account is suspended
+  TERMINATED = 3,      // Account is terminated
+  LIMITED_ACCESS = 4   // Account has limited access
+}
+```
+
+**RefundPreference**
+```typescript
+{
+  UNDECLARED = 0,     // Use to avoid providing information
+  GRANT = 1,          // Prefer to grant the refund
+  DECLINE = 2,        // Prefer to decline the refund
+  NO_PREFERENCE = 3   // No preference
+}
+```
+
+Example usage:
+```typescript
+const consumptionData = {
+  customerConsented: true,  // Make sure you have obtained valid consent
+  consumptionStatus: ConsumptionStatus.FULLY_CONSUMED,
+  platform: Platform.APPLE,
+  sampleContentProvided: true,
+  deliveryStatus: DeliveryStatus.DELIVERED_WORKING,
+  appAccountToken: 'YOUR_APP_ACCOUNT_TOKEN',
+  accountTenure: AccountTenure.DAYS_180_365,
+  playTime: PlayTime.HOURS_1_6,
+  lifetimeDollarsRefunded: LifetimeDollars.USD_0,
+  lifetimeDollarsPurchased: LifetimeDollars.USD_50_99_99,
+  userStatus: UserStatus.ACTIVE,
+  refundPreference: RefundPreference.NO_PREFERENCE
+};
+
+await storeKit.sendConsumptionInformation('transactionId', consumptionData);
+```
+
+### Important Notes on Consumption Information
+
+1. **User Consent Required**
+   - You MUST obtain valid consent before sharing consumption data
+   - Consent must be freely given, specific, informed, and unambiguous
+   - Users should be able to withdraw consent at any time
+   - Do NOT use App Tracking Transparency prompt for this consent
+   - The API will return HTTP 400 with `InvalidCustomerConsentError` if `customerConsented` is not `true`
+
+2. **Response to Refund Requests**
+   - Send consumption information when you receive a `CONSUMPTION_REQUEST` notification
+   - Respond within 12 hours of receiving the notification
+   - Only send data if user has provided consent
+
+3. **Privacy Considerations**
+   - Never store sensitive user data unencrypted
+   - Update your app's privacy labels to reflect data usage
+   - Implement user data access and deletion requests
+   - Follow Apple's privacy guidelines
+
+4. **Best Practices**
+   - Use `UNDECLARED` (0) for any field where you don't want to provide information
+   - Always validate the data ranges before sending
+   - Keep track of user consent status
+   - Implement proper error handling for API responses
 
 ### Utility
 - `getCurrentEnvironment()`: Get the current environment being used
