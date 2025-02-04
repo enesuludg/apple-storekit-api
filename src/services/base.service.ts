@@ -29,20 +29,34 @@ export class BaseService {
     } else {
       this.currentEnvironment = 'production';
     }
-    console.log(this.getBaseUrl());
     this.baseUrl = this.getBaseUrl();
   }
 
   protected loadPrivateKey(privateKey: string): string {
     try {
+      // First try to read as a file path
       const resolvedPath = resolve(privateKey);
-      return readFileSync(resolvedPath, 'utf8');
+      const keyContent = readFileSync(resolvedPath, 'utf8');
+      return this.normalizePrivateKey(keyContent);
     } catch (error) {
+      // If file reading fails, assume it's the key content directly
       if (privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-        return privateKey;
+        return this.normalizePrivateKey(privateKey);
       }
       throw new Error('Invalid private key: Must be either a valid file path or the key content');
     }
+  }
+
+  private normalizePrivateKey(key: string): string {
+    // Remove any whitespace and ensure proper PEM format
+    const cleanKey = key.replace(/\\n/g, '\n').trim();
+    if (!cleanKey.startsWith('-----BEGIN PRIVATE KEY-----')) {
+      throw new Error('Invalid private key format: Must start with -----BEGIN PRIVATE KEY-----');
+    }
+    if (!cleanKey.endsWith('-----END PRIVATE KEY-----')) {
+      throw new Error('Invalid private key format: Must end with -----END PRIVATE KEY-----');
+    }
+    return cleanKey;
   }
 
   protected generateToken(): string {
@@ -60,10 +74,18 @@ export class BaseService {
       bid: this.config.bundleId
     };
 
-    return jwt.sign(payload, this.privateKeyContent, { 
-      algorithm: 'ES256', 
-      header 
-    });
+    try {
+      return jwt.sign(payload, this.privateKeyContent, { 
+        algorithm: 'ES256', 
+        header,
+        noTimestamp: true
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Token generation failed: ${error.message}. Please ensure your private key is in the correct ECDSA format.`);
+      }
+      throw error;
+    }
   }
 
   protected decodeSignedData(signedData: string): any {
@@ -115,7 +137,6 @@ export class BaseService {
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        //console.log(error)
         throw new Error(`Apple StoreKit API Error: ${error.response?.data || error.message}`);
       }
       throw error;
