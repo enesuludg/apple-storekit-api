@@ -1,3 +1,5 @@
+import { TransactionInfo } from "./transaction";
+
 export interface SubscriptionStatus {
   /** The original transaction identifier */
   originalTransactionId: string;
@@ -6,9 +8,22 @@ export interface SubscriptionStatus {
   /** The expiration date of the subscription */
   expirationDate: Date;
   /** Decoded transaction information */
-  transactionInfo: any;
+  transactionInfo: TransactionInfo;
   /** Decoded renewal information */
-  renewalInfo: any;
+  renewalInfo: RenewalInfo;
+}
+
+export interface RenewalInfo {
+  originalTransactionId: string;
+  autoRenewProductId: string;
+  productId: string;
+  autoRenewStatus: number;
+  renewalPrice: number;
+  currency: string;
+  signedDate: number;
+  environment: string;
+  recentSubscriptionStartDate: number;
+  renewalDate: number;
 }
 
 export interface AppleSubscriptionResponse {
