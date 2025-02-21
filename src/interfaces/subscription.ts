@@ -1,10 +1,27 @@
 import { TransactionInfo } from "./transaction";
 
+export enum SubscriptionStatusType {
+  /** The auto-renewable subscription is active */
+  ACTIVE = 1,
+  /** The auto-renewable subscription is expired */
+  EXPIRED = 2,
+  /** The auto-renewable subscription is in a billing retry period */
+  BILLING_RETRY = 3,
+  /** The auto-renewable subscription is in a Billing Grace Period */
+  GRACE_PERIOD = 4,
+  /** The auto-renewable subscription is revoked. The App Store refunded the transaction or revoked it from Family Sharing */
+  REVOKED = 5
+}
+
+export type SubscriptionStatusTypeString = keyof typeof SubscriptionStatusType;
+
 export interface SubscriptionStatus {
   /** The original transaction identifier */
   originalTransactionId: string;
   /** The current status of the subscription */
   status: number;
+  /** The current status of the subscription as string */
+  statusType: SubscriptionStatusTypeString;
   /** The expiration date of the subscription */
   expirationDate: Date;
   /** Decoded transaction information */
