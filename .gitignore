@@ -9,7 +9,8 @@ dist/
 *.p8
 
 # Development
-examples/example.dev.ts
+examples/
+example.dev.ts
 
 # IDE
 .idea/
