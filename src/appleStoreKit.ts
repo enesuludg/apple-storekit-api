@@ -47,6 +47,10 @@ export class AppleStoreKit extends BaseService {
     return this.transactionService.setAppAccountToken(originalTransactionId, appAccountToken);
   }
 
+  getAccountTenure(date: Date) {
+    return this.transactionService.getAccountTenure(date);
+  }
+
   // Consumption methods
   async sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest) {
     return this.consumptionService.sendConsumptionInformation(transactionId, consumptionRequest);

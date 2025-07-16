@@ -1,4 +1,4 @@
-import { TransactionHistoryResponse, VerifyPurchaseResponse, TransactionInfo, UpdateAppAccountTokenRequest } from '../interfaces';
+import { TransactionHistoryResponse, VerifyPurchaseResponse, TransactionInfo, UpdateAppAccountTokenRequest, AccountTenure } from '../interfaces';
 import { BaseService } from './base.service';
 
 export class TransactionService extends BaseService {
@@ -34,5 +34,30 @@ export class TransactionService extends BaseService {
     };
 
     await this.makeRequest<void>('put', `/transactions/${originalTransactionId}/appAccountToken`, requestBody);
+  }
+
+  getAccountTenure(date: Date) {
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays < 3) {
+      return AccountTenure.DAYS_0_3;
+    }
+    if (diffDays < 10) {
+      return AccountTenure.DAYS_3_10;
+    }
+    if (diffDays < 30) {
+      return AccountTenure.DAYS_10_30;
+    }
+    if (diffDays < 90) {
+      return AccountTenure.DAYS_30_90;
+    }
+    if (diffDays < 180) {
+      return AccountTenure.DAYS_90_180;
+    }
+    if (diffDays < 365) {
+      return AccountTenure.DAYS_180_365;
+    }
+    return AccountTenure.DAYS_OVER_365;
   }
 } 
