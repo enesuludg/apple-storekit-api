@@ -137,7 +137,39 @@ export class BaseService {
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        throw new Error(`Apple StoreKit API Error: ${error.response?.data || error.message}`);
+        let errorMessage = 'Apple StoreKit API Error: ';
+        
+        if (error.response?.data) {
+          // Handle different types of error response data
+          if (typeof error.response.data === 'string') {
+            errorMessage += error.response.data;
+          } else if (typeof error.response.data === 'object') {
+            // Try to extract meaningful error information
+            const data = error.response.data;
+            if (data.errorMessage) {
+              errorMessage += data.errorMessage;
+            } else if (data.message) {
+              errorMessage += data.message;
+            } else if (data.error) {
+              errorMessage += data.error;
+            } else if (data.errorCode) {
+              errorMessage += `Error Code: ${data.errorCode}`;
+            } else {
+              errorMessage += JSON.stringify(data);
+            }
+          } else {
+            errorMessage += String(error.response.data);
+          }
+        } else {
+          errorMessage += error.message;
+        }
+        
+        // Add status code if available
+        if (error.response?.status) {
+          errorMessage += ` (Status: ${error.response.status})`;
+        }
+        
+        throw new Error(errorMessage);
       }
       throw error;
     }
