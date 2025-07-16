@@ -43,6 +43,10 @@ export class AppleStoreKit extends BaseService {
     return this.transactionService.refundLookup(transactionId);
   }
 
+  async setAppAccountToken(originalTransactionId: string, appAccountToken: string) {
+    return this.transactionService.setAppAccountToken(originalTransactionId, appAccountToken);
+  }
+
   // Consumption methods
   async sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest) {
     return this.consumptionService.sendConsumptionInformation(transactionId, consumptionRequest);

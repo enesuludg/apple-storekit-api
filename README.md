@@ -175,6 +175,7 @@ This method returns the current status of a subscription, including:
 - `getTransactionHistory(transactionId: string)`: Get transaction history
 - `lookupOrder(orderId: string)`: Look up order details
 - `refundLookup(transactionId: string)`: Check refund status
+- `setAppAccountToken(originalTransactionId: string, appAccountToken: string)`: Set or update app account token for a transaction
 
 ### Consumption Information
 - `sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information for refund decisions
@@ -184,24 +185,24 @@ The `ConsumptionRequest` interface includes required and optional fields with th
 #### Required Fields:
 ```typescript
 {
-  customerConsented: boolean;      // User must consent to data sharing
-  consumptionStatus: ConsumptionStatus;
-  platform: Platform;
-  sampleContentProvided: boolean;
-  deliveryStatus: DeliveryStatus;
+  accountTenure: AccountTenure;           // Age of customer's account
+  appAccountToken: string;                // UUID of user account
+  consumptionStatus: ConsumptionStatus;   // Extent of consumption
+  customerConsented: boolean;             // User consent (must be true)
+  deliveryStatus: DeliveryStatus;         // Delivery success status
+  lifetimeDollarsPurchased: LifetimeDollars; // Total purchases (USD)
+  lifetimeDollarsRefunded: LifetimeDollars;  // Total refunds (USD)
+  platform: Platform;                     // Purchase platform
+  playTime: PlayTime;                     // App usage time
+  sampleContentProvided: boolean;         // Free sample provided
+  userStatus: UserStatus;                 // Customer account status
 }
 ```
 
 #### Optional Fields:
 ```typescript
 {
-  appAccountToken?: string;        // UUID for user account
-  accountTenure?: AccountTenure;
-  playTime?: PlayTime;
-  lifetimeDollarsRefunded?: LifetimeDollars;
-  lifetimeDollarsPurchased?: LifetimeDollars;
-  userStatus?: UserStatus;
-  refundPreference?: RefundPreference;
+  refundPreference?: RefundPreference;    // Your refund preference
 }
 ```
 
@@ -377,6 +378,27 @@ This library is compatible with:
 - TypeScript 4.9.x and above
 - All major Node.js frameworks (Express, Koa, Nest.js, etc.)
 - Both CommonJS and ES Modules
+
+### Set App Account Token
+
+Sets or updates the app account token for a transaction made outside of your app:
+
+```typescript
+try {
+  await storeKit.setAppAccountToken(
+    'original-transaction-id',
+    'user-account-uuid'
+  );
+  console.log('App account token updated successfully');
+} catch (error) {
+  console.error('Failed to update app account token:', error.message);
+}
+```
+
+**Note**: This method is available in App Store Server API 1.16+ and is useful for:
+- Linking transactions to specific user accounts
+- Updating account tokens for purchases made outside your app
+- Improving transaction tracking and analytics
 
 ## Error Handling
 

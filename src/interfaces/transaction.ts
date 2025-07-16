@@ -28,4 +28,9 @@ export interface TransactionInfo {
 
 export interface VerifyPurchaseResponse {
   signedTransactionInfo: string;
+}
+
+export interface UpdateAppAccountTokenRequest {
+  /** The app account token value to set for the transaction */
+  appAccountToken: string;
 } 
