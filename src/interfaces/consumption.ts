@@ -69,39 +69,39 @@ export enum RefundPreference {
 }
 
 export interface ConsumptionRequest {
-  /** Required: User must consent to provide consumption data */
-  customerConsented: boolean;
+  /** Required: The age of the customer's account */
+  accountTenure: AccountTenure;
+
+  /** Required: The UUID of the in-app user account that completed the in-app purchase transaction */
+  appAccountToken: string;
 
   /** Required: The extent to which the customer consumed the in-app purchase */
   consumptionStatus: ConsumptionStatus;
 
-  /** Required: The platform on which the customer consumed the in-app purchase */
-  platform: Platform;
-
-  /** Required: Whether you provided a free sample/trial before purchase */
-  sampleContentProvided: boolean;
+  /** Required: User must consent to provide consumption data (must be true) */
+  customerConsented: boolean;
 
   /** Required: Whether the app successfully delivered the purchase */
   deliveryStatus: DeliveryStatus;
 
-  /** Optional: UUID of the in-app user account */
-  appAccountToken?: string;
+  /** Required: Total amount of purchases made across all platforms (in USD) */
+  lifetimeDollarsPurchased: LifetimeDollars;
 
-  /** Optional: Age of the customer's account */
-  accountTenure?: AccountTenure;
+  /** Required: Total amount of refunds received across all platforms (in USD) */
+  lifetimeDollarsRefunded: LifetimeDollars;
 
-  /** Optional: Amount of time the customer used the app */
-  playTime?: PlayTime;
+  /** Required: The platform on which the customer consumed the in-app purchase */
+  platform: Platform;
 
-  /** Optional: Total amount of refunds received across all platforms */
-  lifetimeDollarsRefunded?: LifetimeDollars;
-
-  /** Optional: Total amount of purchases made across all platforms */
-  lifetimeDollarsPurchased?: LifetimeDollars;
-
-  /** Optional: Status of the customer's account */
-  userStatus?: UserStatus;
+  /** Required: Amount of time the customer used the app */
+  playTime: PlayTime;
 
   /** Optional: Your preference for the refund request outcome */
   refundPreference?: RefundPreference;
+
+  /** Required: Whether you provided a free sample/trial before purchase */
+  sampleContentProvided: boolean;
+
+  /** Required: Status of the customer's account */
+  userStatus: UserStatus;
 } 

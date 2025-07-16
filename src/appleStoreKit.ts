@@ -1,5 +1,6 @@
 import { 
-  AppleStoreKitConfig, 
+  AppleStoreKitConfig,
+  ConsumptionRequest, 
 } from './interfaces';
 import { 
   BaseService, 
@@ -43,7 +44,7 @@ export class AppleStoreKit extends BaseService {
   }
 
   // Consumption methods
-  async sendConsumptionInformation(transactionId: string, consumptionRequest: any) {
+  async sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest) {
     return this.consumptionService.sendConsumptionInformation(transactionId, consumptionRequest);
   }
 } 
