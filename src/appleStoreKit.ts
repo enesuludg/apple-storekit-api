@@ -1,6 +1,7 @@
 import { 
   AppleStoreKitConfig,
-  ConsumptionRequest, 
+  ConsumptionRequest,
+  AccountTenure
 } from './interfaces';
 import { 
   BaseService, 
@@ -47,7 +48,7 @@ export class AppleStoreKit extends BaseService {
     return this.transactionService.setAppAccountToken(originalTransactionId, appAccountToken);
   }
 
-  getAccountTenure(date: Date) {
+  getAccountTenure(date: Date): AccountTenure {
     return this.transactionService.getAccountTenure(date);
   }
 

@@ -36,7 +36,7 @@ export class TransactionService extends BaseService {
     await this.makeRequest<void>('put', `/transactions/${originalTransactionId}/appAccountToken`, requestBody);
   }
 
-  getAccountTenure(date: Date) {
+  getAccountTenure(date: Date): AccountTenure {
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
