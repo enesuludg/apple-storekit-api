@@ -1,4 +1,4 @@
-import { TransactionHistoryResponse, VerifyPurchaseResponse, TransactionInfo, UpdateAppAccountTokenRequest, AccountTenure } from '../interfaces';
+import { TransactionHistoryResponse, VerifyPurchaseResponse, TransactionInfo, UpdateAppAccountTokenRequest, AccountTenure, RefundLookupResponse } from '../interfaces';
 import { BaseService } from './base.service';
 
 export class TransactionService extends BaseService {
@@ -16,8 +16,8 @@ export class TransactionService extends BaseService {
     return this.makeRequest('get', `/lookup/${orderId}`);
   }
 
-  async refundLookup(transactionId: string) {
-    return this.makeRequest('get', `/refund/lookup/${transactionId}`);
+  async refundLookup(transactionId: string): Promise<RefundLookupResponse> {
+    return this.makeRequest<RefundLookupResponse>('get', `/refund/lookup/${transactionId}`);
   }
 
   /**

@@ -33,4 +33,13 @@ export interface VerifyPurchaseResponse {
 export interface UpdateAppAccountTokenRequest {
   /** The app account token value to set for the transaction */
   appAccountToken: string;
+}
+
+export interface RefundLookupResponse {
+  /** Array of signed transaction JWTs */
+  signedTransactions: string[];
+  /** Revision identifier for the refund lookup */
+  revision: string;
+  /** Indicates if there are more refunds to fetch */
+  hasMore: boolean;
 } 
