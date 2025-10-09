@@ -42,4 +42,11 @@ export interface RefundLookupResponse {
   revision: string;
   /** Indicates if there are more refunds to fetch */
   hasMore: boolean;
+}
+
+export interface LookupOrderResponse {
+  /** Status code of the order lookup */
+  status: number;
+  /** Array of decoded transaction information */
+  signedTransactions: TransactionInfo[];
 } 

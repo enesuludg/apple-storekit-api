@@ -1,4 +1,4 @@
-import { TransactionHistoryResponse, VerifyPurchaseResponse, TransactionInfo, UpdateAppAccountTokenRequest, AccountTenure, RefundLookupResponse } from '../interfaces';
+import { TransactionHistoryResponse, VerifyPurchaseResponse, TransactionInfo, UpdateAppAccountTokenRequest, AccountTenure, RefundLookupResponse, LookupOrderResponse } from '../interfaces';
 import { BaseService } from './base.service';
 
 export class TransactionService extends BaseService {
@@ -12,8 +12,13 @@ export class TransactionService extends BaseService {
     return response.signedTransactions.map((jwt: string) => this.decodeSignedData(jwt));
   }
 
-  async lookupOrder(orderId: string) {
-    return this.makeRequest('get', `/lookup/${orderId}`);
+  async lookupOrder(orderId: string): Promise<LookupOrderResponse> {
+    const response = await this.makeRequest<{ status: number; signedTransactions: string[] }>('get', `/lookup/${orderId}`);
+    
+    return {
+      status: response.status,
+      signedTransactions: response.signedTransactions.map((jwt: string) => this.decodeSignedData(jwt))
+    };
   }
 
   async refundLookup(transactionId: string): Promise<RefundLookupResponse> {

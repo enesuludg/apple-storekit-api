@@ -1,7 +1,11 @@
 import { 
   AppleStoreKitConfig,
   ConsumptionRequest,
-  AccountTenure
+  AccountTenure,
+  SubscriptionStatus,
+  TransactionInfo,
+  LookupOrderResponse,
+  RefundLookupResponse
 } from './interfaces';
 import { 
   BaseService, 
@@ -23,24 +27,24 @@ export class AppleStoreKit extends BaseService {
   }
 
   // Subscription methods
-  async getSubscriptionStatus(originalTransactionId: string) {
+  async getSubscriptionStatus(originalTransactionId: string): Promise<SubscriptionStatus> {
     return this.subscriptionService.getSubscriptionStatus(originalTransactionId);
   }
 
   // Transaction methods
-  async verifyPurchase(transactionId: string) {
+  async verifyPurchase(transactionId: string): Promise<TransactionInfo> {
     return this.transactionService.verifyPurchase(transactionId);
   }
 
-  async getTransactionHistory(transactionId: string) {
+  async getTransactionHistory(transactionId: string): Promise<TransactionInfo[]> {
     return this.transactionService.getTransactionHistory(transactionId);
   }
 
-  async lookupOrder(orderId: string) {
+  async lookupOrder(orderId: string): Promise<LookupOrderResponse> {
     return this.transactionService.lookupOrder(orderId);
   }
 
-  async refundLookup(transactionId: string) {
+  async refundLookup(transactionId: string): Promise<RefundLookupResponse> {
     return this.transactionService.refundLookup(transactionId);
   }
 
