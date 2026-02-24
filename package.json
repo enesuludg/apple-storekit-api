@@ -1,7 +1,7 @@
 {
   "name": "apple-storekit-api",
-  "version": "1.0.18",
-  "description": "Apple StoreKit API integration for In-App Purchases and Subscriptions",
+  "version": "1.0.19",
+  "description": "Apple StoreKit 2 Server API - Verify purchases, manage subscriptions, handle refunds, and process In-App Purchases with TypeScript support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -25,11 +25,19 @@
   "keywords": [
     "apple",
     "storekit",
+    "storekit2",
     "in-app-purchase",
     "iap",
     "subscription",
     "ios",
-    "app-store"
+    "app-store",
+    "app-store-connect",
+    "apple-api",
+    "purchase-verification",
+    "receipt-validation",
+    "server-api",
+    "refund",
+    "transaction"
   ],
   "author": "Enes uludag",
   "license": "MIT",

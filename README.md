@@ -1,5 +1,10 @@
 # Apple StoreKit API
 
+[![npm version](https://img.shields.io/npm/v/apple-storekit-api.svg)](https://www.npmjs.com/package/apple-storekit-api)
+[![npm downloads](https://img.shields.io/npm/dm/apple-storekit-api.svg)](https://www.npmjs.com/package/apple-storekit-api)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
+
 A TypeScript/JavaScript library for Apple StoreKit API integration. Handles In-App Purchases and subscription management using the latest StoreKit 2 API.
 
 ## Features
@@ -165,10 +170,21 @@ const status = await storeKit.getSubscriptionStatus('original-transaction-id');
 
 This method returns the current status of a subscription, including:
 - Original transaction ID
-- Status
+- Status (numeric) and statusType (string)
 - Expiration date
 - Transaction info
 - Renewal info
+
+**SubscriptionStatusType**
+```typescript
+{
+  ACTIVE = 1,        // The auto-renewable subscription is active
+  EXPIRED = 2,       // The auto-renewable subscription is expired
+  BILLING_RETRY = 3, // The subscription is in a billing retry period
+  GRACE_PERIOD = 4,  // The subscription is in a Billing Grace Period
+  REVOKED = 5        // The subscription is revoked (refunded or removed from Family Sharing)
+}
+```
 
 ### Purchases
 - `verifyPurchase(transactionId: string)`: Verify a specific purchase using StoreKit 2 API
@@ -179,30 +195,32 @@ This method returns the current status of a subscription, including:
 
 ### Consumption Information
 - `sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information for refund decisions
+- `sendConsumptionInformationV2(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information using V2 API
 
 The `ConsumptionRequest` interface includes required and optional fields with their corresponding enum values:
 
 #### Required Fields:
 ```typescript
 {
-  accountTenure: AccountTenure;           // Age of customer's account
-  appAccountToken: string;                // UUID of user account
-  consumptionStatus: ConsumptionStatus;   // Extent of consumption
   customerConsented: boolean;             // User consent (must be true)
   deliveryStatus: DeliveryStatus;         // Delivery success status
-  lifetimeDollarsPurchased: LifetimeDollars; // Total purchases (USD)
-  lifetimeDollarsRefunded: LifetimeDollars;  // Total refunds (USD)
-  platform: Platform;                     // Purchase platform
-  playTime: PlayTime;                     // App usage time
   sampleContentProvided: boolean;         // Free sample provided
-  userStatus: UserStatus;                 // Customer account status
 }
 ```
 
 #### Optional Fields:
 ```typescript
 {
+  consumptionPercentage?: number;         // Percentage consumed (0-100000 milliunits)
   refundPreference?: RefundPreference;    // Your refund preference
+  accountTenure?: AccountTenure;          // Age of customer's account
+  appAccountToken?: string;               // UUID of user account
+  consumptionStatus?: ConsumptionStatus;  // Extent of consumption
+  lifetimeDollarsPurchased?: LifetimeDollars; // Total purchases (USD)
+  lifetimeDollarsRefunded?: LifetimeDollars;  // Total refunds (USD)
+  platform?: Platform;                    // Purchase platform
+  playTime?: PlayTime;                    // App usage time
+  userStatus?: UserStatus;                // Customer account status
 }
 ```
 
@@ -230,12 +248,11 @@ The `ConsumptionRequest` interface includes required and optional fields with th
 **DeliveryStatus**
 ```typescript
 {
-  DELIVERED_WORKING = 0,              // Delivered and working properly
-  NOT_DELIVERED_QUALITY_ISSUE = 1,    // Not delivered due to quality issue
-  DELIVERED_WRONG_ITEM = 2,           // Wrong item delivered
-  NOT_DELIVERED_SERVER_OUTAGE = 3,    // Not delivered due to server outage
-  NOT_DELIVERED_CURRENCY_CHANGE = 4,  // Not delivered due to currency change
-  NOT_DELIVERED_OTHER = 5             // Not delivered for other reasons
+  DELIVERED = 'DELIVERED',                           // Delivered and working properly
+  UNDELIVERED_QUALITY_ISSUE = 'UNDELIVERED_QUALITY_ISSUE',   // Not delivered due to quality issue
+  UNDELIVERED_WRONG_ITEM = 'UNDELIVERED_WRONG_ITEM',         // Wrong item delivered
+  UNDELIVERED_SERVER_OUTAGE = 'UNDELIVERED_SERVER_OUTAGE',   // Not delivered due to server outage
+  UNDELIVERED_OTHER = 'UNDELIVERED_OTHER'                    // Not delivered for other reasons
 }
 ```
 
@@ -295,28 +312,30 @@ The `ConsumptionRequest` interface includes required and optional fields with th
 **RefundPreference**
 ```typescript
 {
-  UNDECLARED = 0,     // Use to avoid providing information
-  GRANT = 1,          // Prefer to grant the refund
-  DECLINE = 2,        // Prefer to decline the refund
-  NO_PREFERENCE = 3   // No preference
+  DECLINE = 'DECLINE',            // Prefer to decline the refund
+  GRANT_FULL = 'GRANT_FULL',      // Prefer to grant a full refund
+  GRANT_PRORATED = 'GRANT_PRORATED' // Prefer to grant a prorated refund
 }
 ```
 
 Example usage:
 ```typescript
 const consumptionData = {
+  // Required fields
   customerConsented: true,  // Make sure you have obtained valid consent
+  deliveryStatus: DeliveryStatus.DELIVERED,
+  sampleContentProvided: true,
+
+  // Optional fields
   consumptionStatus: ConsumptionStatus.FULLY_CONSUMED,
   platform: Platform.APPLE,
-  sampleContentProvided: true,
-  deliveryStatus: DeliveryStatus.DELIVERED_WORKING,
   appAccountToken: 'YOUR_APP_ACCOUNT_TOKEN',
   accountTenure: AccountTenure.DAYS_180_365,
   playTime: PlayTime.HOURS_1_6,
   lifetimeDollarsRefunded: LifetimeDollars.USD_0,
   lifetimeDollarsPurchased: LifetimeDollars.USD_50_99_99,
   userStatus: UserStatus.ACTIVE,
-  refundPreference: RefundPreference.NO_PREFERENCE
+  refundPreference: RefundPreference.GRANT_FULL
 };
 
 await storeKit.sendConsumptionInformation('transactionId', consumptionData);
@@ -350,6 +369,7 @@ await storeKit.sendConsumptionInformation('transactionId', consumptionData);
 
 ### Utility
 - `getCurrentEnvironment()`: Get the current environment being used
+- `getAccountTenure(date: Date)`: Calculate the account tenure enum value based on account creation date
 
 ## Security Best Practices
 
