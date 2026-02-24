@@ -3,17 +3,17 @@ import { BaseService } from './base.service';
 
 export class TransactionService extends BaseService {
   async verifyPurchase(transactionId: string): Promise<TransactionInfo> {
-    const response = await this.makeRequest<VerifyPurchaseResponse>('get', `/transactions/${transactionId}`);
+    const response = await this.makeRequest<VerifyPurchaseResponse>('get', `/inApps/v1/transactions/${transactionId}`);
     return this.decodeSignedData(response.signedTransactionInfo);
   }
 
   async getTransactionHistory(transactionId: string): Promise<TransactionInfo[]> {
-    const response = await this.makeRequest<TransactionHistoryResponse>('get', `/history/${transactionId}`);
+    const response = await this.makeRequest<TransactionHistoryResponse>('get', `/inApps/v1/history/${transactionId}`);
     return response.signedTransactions.map((jwt: string) => this.decodeSignedData(jwt));
   }
 
   async lookupOrder(orderId: string): Promise<LookupOrderResponse> {
-    const response = await this.makeRequest<{ status: number; signedTransactions: string[] }>('get', `/lookup/${orderId}`);
+    const response = await this.makeRequest<{ status: number; signedTransactions: string[] }>('get', `/inApps/v1/lookup/${orderId}`);
     
     return {
       status: response.status,
@@ -22,7 +22,7 @@ export class TransactionService extends BaseService {
   }
 
   async refundLookup(transactionId: string): Promise<RefundLookupResponse> {
-    return this.makeRequest<RefundLookupResponse>('get', `/refund/lookup/${transactionId}`);
+    return this.makeRequest<RefundLookupResponse>('get', `/inApps/v1/refund/lookup/${transactionId}`);
   }
 
   /**
@@ -38,7 +38,7 @@ export class TransactionService extends BaseService {
       appAccountToken
     };
 
-    await this.makeRequest<void>('put', `/transactions/${originalTransactionId}/appAccountToken`, requestBody);
+    await this.makeRequest<void>('put', `/inApps/v1/transactions/${originalTransactionId}/appAccountToken`, requestBody);
   }
 
   getAccountTenure(date: Date): AccountTenure {

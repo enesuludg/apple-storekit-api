@@ -11,7 +11,7 @@ export class SubscriptionService extends BaseService {
   }
 
   async getSubscriptionStatus(originalTransactionId: string): Promise<SubscriptionStatus> {
-    const response = await this.makeRequest<AppleSubscriptionResponse>('get', `/subscriptions/${originalTransactionId}`);
+    const response = await this.makeRequest<AppleSubscriptionResponse>('get', `/inApps/v1/subscriptions/${originalTransactionId}`);
     
     if (!response.data || response.data.length === 0) {
       throw new Error('No subscription data found. This might be a consumption transaction ID instead of a subscription transaction ID.');

@@ -19,8 +19,8 @@ export class BaseService {
 
   protected getBaseUrl(): string {
     return this.currentEnvironment === 'sandbox'
-      ? 'https://api.storekit-sandbox.itunes.apple.com/inApps/v1'
-      : 'https://api.storekit.itunes.apple.com/inApps/v1';
+      ? 'https://api.storekit-sandbox.itunes.apple.com'
+      : 'https://api.storekit.itunes.apple.com';
   }
 
   protected async switchEnvironment(): Promise<void> {

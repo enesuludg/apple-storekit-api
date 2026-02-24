@@ -60,4 +60,7 @@ export class AppleStoreKit extends BaseService {
   async sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest) {
     return this.consumptionService.sendConsumptionInformation(transactionId, consumptionRequest);
   }
+  async sendConsumptionInformationV2(transactionId: string, consumptionRequest: ConsumptionRequest) {
+    return this.consumptionService.sendConsumptionInformationV2(transactionId, consumptionRequest);
+  }
 } 

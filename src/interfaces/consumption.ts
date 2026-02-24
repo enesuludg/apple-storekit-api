@@ -17,12 +17,12 @@ export enum ConsumptionStatus {
 }
 
 export enum DeliveryStatus {
-  DELIVERED_WORKING = 0,
-  NOT_DELIVERED_QUALITY_ISSUE = 1,
-  DELIVERED_WRONG_ITEM = 2,
-  NOT_DELIVERED_SERVER_OUTAGE = 3,
-  NOT_DELIVERED_CURRENCY_CHANGE = 4,
-  NOT_DELIVERED_OTHER = 5
+  DELIVERED='DELIVERED',
+  UNDELIVERED_QUALITY_ISSUE='UNDELIVERED_QUALITY_ISSUE',
+  UNDELIVERED_WRONG_ITEM='UNDELIVERED_WRONG_ITEM',
+  UNDELIVERED_SERVER_OUTAGE='UNDELIVERED_SERVER_OUTAGE',
+  UNDELIVERED_OTHER='UNDELIVERED_OTHER'
+
 }
 
 export enum Platform {
@@ -62,46 +62,58 @@ export enum UserStatus {
 }
 
 export enum RefundPreference {
-  UNDECLARED = 0,
-  GRANT = 1,
-  DECLINE = 2,
-  NO_PREFERENCE = 3
+  DECLINE = 'DECLINE',
+  GRANT_FULL = 'GRANT_FULL',
+  GRANT_PRORATED = 'GRANT_PRORATED'
 }
 
 export interface ConsumptionRequest {
-  /** Required: The age of the customer's account */
-  accountTenure: AccountTenure;
-
-  /** Required: The UUID of the in-app user account that completed the in-app purchase transaction */
-  appAccountToken: string;
-
-  /** Required: The extent to which the customer consumed the in-app purchase */
-  consumptionStatus: ConsumptionStatus;
-
-  /** Required: User must consent to provide consumption data (must be true) */
+  /** Required: A Boolean value of true or false that indicates whether the customer consented to provide consumption data */
   customerConsented: boolean;
 
-  /** Required: Whether the app successfully delivered the purchase */
+  /** Optional: An integer that indicates the percentage of the In-App Purchase the customer consumed, in milliunits. Minimum: 0, Maximum: 100000 */
+  consumptionPercentage?: number;
+
+  /** Required: A value that indicates whether the app successfully delivered an In-App Purchase that works properly */
   deliveryStatus: DeliveryStatus;
 
-  /** Required: Total amount of purchases made across all platforms (in USD) */
-  lifetimeDollarsPurchased: LifetimeDollars;
-
-  /** Required: Total amount of refunds received across all platforms (in USD) */
-  lifetimeDollarsRefunded: LifetimeDollars;
-
-  /** Required: The platform on which the customer consumed the in-app purchase */
-  platform: Platform;
-
-  /** Required: Amount of time the customer used the app */
-  playTime: PlayTime;
-
-  /** Optional: Your preference for the refund request outcome */
+  /** Optional: A value that indicates your preference, based on your operational logic, as to whether the App Store should grant the refund */
   refundPreference?: RefundPreference;
 
-  /** Required: Whether you provided a free sample/trial before purchase */
+  /** Required: A Boolean value of true or false that indicates whether you provided, prior to its purchase, a free sample or trial of the content, or information about its functionality */
   sampleContentProvided: boolean;
 
-  /** Required: Status of the customer's account */
-  userStatus: UserStatus;
+  // Legacy/Additional optional fields (may still be supported)
+  /** Optional: The age of the customer's account */
+  accountTenure?: AccountTenure;
+
+  /** Optional: The UUID of the in-app user account that completed the in-app purchase transaction */
+  appAccountToken?: string;
+
+  /** Optional: The extent to which the customer consumed the in-app purchase */
+  consumptionStatus?: ConsumptionStatus;
+
+  /** Optional: Total amount of purchases made across all platforms (in USD) */
+  lifetimeDollarsPurchased?: LifetimeDollars;
+
+  /** Optional: Total amount of refunds received across all platforms (in USD) */
+  lifetimeDollarsRefunded?: LifetimeDollars;
+
+  /** Optional: The platform on which the customer consumed the in-app purchase */
+  platform?: Platform;
+
+  /** Optional: Amount of time the customer used the app */
+  playTime?: PlayTime;
+
+  /** Optional: Status of the customer's account */
+  userStatus?: UserStatus;
+}
+
+export interface ConsumptionResponse {
+  /** Indicates whether the consumption information was successfully accepted */
+  success: boolean;
+  /** The transaction identifier for which consumption information was sent */
+  transactionId: string;
+  /** HTTP status code (202 when accepted) */
+  statusCode: number;
 } 
