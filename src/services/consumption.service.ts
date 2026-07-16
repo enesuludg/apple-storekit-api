@@ -1,10 +1,17 @@
-import axios from 'axios';
-import { ConsumptionRequest, ConsumptionResponse, AppleStoreKitConfig } from '../interfaces';
-import { BaseService } from './base.service';
+import {
+  ConsumptionRequest,
+  ConsumptionResponse,
+  AppleStoreKitConfig,
+  StoreKitRequestControlOptions
+} from '../interfaces';
+import { createStoreKitClient, StoreKitClient } from './base.service';
+import { encodePathSegment, requireUuid } from './validation';
 
-export class ConsumptionService extends BaseService {
-  constructor(config: AppleStoreKitConfig) {
-    super(config);
+export class ConsumptionService {
+  private readonly client: StoreKitClient;
+
+  constructor(clientOrConfig: StoreKitClient | AppleStoreKitConfig) {
+    this.client = createStoreKitClient(clientOrConfig);
   }
 
   /**
@@ -14,12 +21,26 @@ export class ConsumptionService extends BaseService {
    * @param consumptionRequest The consumption information
    * @returns Promise<void> - Returns 202 Accepted if successful
    */
-  async sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest): Promise<void> {
+  async sendConsumptionInformation(
+    transactionId: string,
+    consumptionRequest: ConsumptionRequest,
+    control: StoreKitRequestControlOptions = {}
+  ): Promise<void> {
     if (!consumptionRequest.customerConsented) {
       throw new Error('Customer consent is required to send consumption information');
     }
 
-    await this.makeRequest('put', `/inApps/v1/transactions/consumption/${transactionId}`, consumptionRequest);
+    const environment = await this.client.resolveTransactionEnvironment(transactionId, control);
+    const encodedTransactionId = encodePathSegment(transactionId, 'transactionId');
+    if (consumptionRequest.appAccountToken) {
+      requireUuid(consumptionRequest.appAccountToken, 'appAccountToken');
+    }
+    await this.client.makeRequest(
+      'put',
+      `/inApps/v1/transactions/consumption/${encodedTransactionId}`,
+      consumptionRequest,
+      { environment, retry: true, ...control }
+    );
   }
 
   /**
@@ -29,7 +50,11 @@ export class ConsumptionService extends BaseService {
    * @param consumptionRequest The consumption information
    * @returns Promise<ConsumptionResponse> - Returns response with 202 Accepted when successful
    */
-  async sendConsumptionInformationV2(transactionId: string, consumptionRequest: ConsumptionRequest): Promise<ConsumptionResponse> {
+  async sendConsumptionInformationV2(
+    transactionId: string,
+    consumptionRequest: ConsumptionRequest,
+    control: StoreKitRequestControlOptions = {}
+  ): Promise<ConsumptionResponse> {
     // Validate required fields
     if (consumptionRequest.customerConsented === undefined) {
       throw new Error('customerConsented is required');
@@ -47,46 +72,33 @@ export class ConsumptionService extends BaseService {
         throw new Error('consumptionPercentage must be between 0 and 100000');
       }
     }
-
-    // Use v2 API endpoint for Send Consumption Information
-    const baseUrl = this.getBaseUrl();
-    const token = this.generateToken();
-    const config = {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    };
+    if (consumptionRequest.appAccountToken) {
+      requireUuid(consumptionRequest.appAccountToken, 'appAccountToken');
+    }
 
     // If customer did not consent, only send required fields with customerConsented: false
     // Apple only uses consumption data if customerConsented is true
-    if (consumptionRequest.customerConsented === false) {
-      const response = await axios.put(
-        `${baseUrl}/inApps/v2/transactions/consumption/${transactionId}`,
-        {
-          customerConsented: false,
-          deliveryStatus: consumptionRequest.deliveryStatus,
-          sampleContentProvided: consumptionRequest.sampleContentProvided
-        },
-        config
-      );
-      return {
-        success: response.status === 202,
-        transactionId,
-        statusCode: response.status
-      };
-    }
+    const requestBody = consumptionRequest.customerConsented === false
+      ? {
+        customerConsented: false,
+        deliveryStatus: consumptionRequest.deliveryStatus,
+        sampleContentProvided: consumptionRequest.sampleContentProvided
+      }
+      : consumptionRequest;
 
-    // If customer consented, send all provided consumption data
-    const response = await axios.put(
-      `${baseUrl}/inApps/v2/transactions/consumption/${transactionId}`,
-      consumptionRequest,
-      config
+    const environment = await this.client.resolveTransactionEnvironment(transactionId, control);
+    const encodedTransactionId = encodePathSegment(transactionId, 'transactionId');
+    const response = await this.client.makeRequestWithEnvironment<void>(
+      'put',
+      `/inApps/v2/transactions/consumption/${encodedTransactionId}`,
+      requestBody,
+      { environment, retry: true, ...control }
     );
+
     return {
-      success: response.status === 202,
+      success: response.statusCode === 202,
       transactionId,
-      statusCode: response.status
+      statusCode: response.statusCode
     };
   }
-} 
+}

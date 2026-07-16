@@ -1,26 +1,34 @@
 {
   "name": "apple-storekit-api",
-  "version": "1.0.19",
+  "version": "2.0.0",
   "description": "Apple StoreKit 2 Server API - Verify purchases, manage subscriptions, handle refunds, and process In-App Purchases with TypeScript support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
   "files": [
-    "dist/index.js",
-    "dist/index.d.ts",
-    "dist/appleStoreKit.js",
-    "dist/appleStoreKit.d.ts",
-    "dist/interfaces/*",
-    "dist/services/*",
-    "package.json",
+    "dist",
     "README.md",
+    "CHANGES.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
-    "dev": "ts-node examples/example.dev.ts",
-    "dev:watch": "nodemon --watch 'src/**/*.ts' --watch 'examples/**/*.ts' --exec 'ts-node' examples/example.dev.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "ts-node examples/example.ts",
+    "dev:watch": "nodemon --watch 'src/**/*.ts' --watch 'examples/**/*.ts' --exec 'ts-node' examples/example.ts",
+    "typecheck": "tsc -p tsconfig.types.json",
+    "test": "npm run typecheck && npm run build && node --test tests/*.test.js",
+    "test:coverage": "npm run typecheck && npm run build && node --experimental-test-coverage --test-coverage-lines=75 --test-coverage-branches=70 --test-coverage-functions=75 --test tests/*.test.js",
+    "prepack": "npm test",
+    "audit:prod": "npm audit --omit=dev"
   },
   "keywords": [
     "apple",
@@ -42,22 +50,23 @@
   "author": "Enes uludag",
   "license": "MIT",
   "dependencies": {
-    "axios": "^1.6.7",
-    "jsonwebtoken": "^9.0.2"
+    "@apple/app-store-server-library": "^3.1.0",
+    "axios": "^1.18.1",
+    "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
-    "@types/jsonwebtoken": "^9.0.6",
-    "@types/node": "^14.18.63",
-    "nodemon": "^3.1.9",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.20.1",
+    "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
-    "typescript": "^4.9.5"
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/enesuludg/apple-storekit-api.git"
   },
   "engines": {
-    "node": ">=10.24.1"
+    "node": ">=22.0.0"
   },
   "directories": {
     "example": "examples"

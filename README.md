@@ -10,14 +10,14 @@ A TypeScript/JavaScript library for Apple StoreKit API integration. Handles In-A
 ## Features
 
 - Subscription status verification
-- Purchase verification (using StoreKit 2)
+- Purchase verification with Apple JWS certificate-chain and claim validation
 - Transaction history
 - Order information lookup
 - Refund status checking
 - Consumption information reporting
 - Flexible private key handling (file path or string content)
 - Auto environment detection (production/sandbox)
-- Wide Node.js version support (10.24.1 and above)
+- Bounded retries, request timeouts, cancellation, and streaming pagination
 
 ## Installation
 
@@ -25,17 +25,34 @@ A TypeScript/JavaScript library for Apple StoreKit API integration. Handles In-A
 npm install apple-storekit-api
 ```
 
+See [CHANGES.md](./CHANGES.md) for release notes and migration guidance.
+
+### Version 2 migration notes
+
+- Signed payload helpers now verify asynchronously and require Apple root certificates.
+- Production signed-data verification requires `appAppleId`.
+- `AppleStoreKit` uses composition and no longer exposes low-level transport methods.
+- Endpoints without a transaction identifier require an explicit environment in auto mode.
+- The supported runtime is Node.js 22 or newer.
+
 ## Requirements
 
-- Node.js >= 10.24.1
+- Node.js >= 22
 - App Store Connect API access
 - Private key in `.p8` format (file or content)
 - Issuer ID and Key ID
+- Apple root certificates from [Apple PKI](https://www.apple.com/certificateauthority/)
+- App Apple ID for production signed-data verification
 
 ## Usage
 
 ```typescript
 import { AppleStoreKit } from 'apple-storekit-api';
+import { readFileSync } from 'node:fs';
+
+const appleRootCertificates = [
+  readFileSync('/path/to/AppleRootCA-G3.cer')
+];
 
 // Example with file path
 const configWithPath = {
@@ -43,6 +60,7 @@ const configWithPath = {
   keyId: 'YOUR_KEY_ID',
   privateKey: '/path/to/private_key.p8',
   bundleId: 'com.yourcompany.yourapp',
+  appleRootCertificates,
   environment: 'sandbox' // or 'production'
 };
 
@@ -52,6 +70,7 @@ const configWithContent = {
   keyId: 'YOUR_KEY_ID',
   privateKey: '-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY_CONTENT\n-----END PRIVATE KEY-----',
   bundleId: 'com.yourcompany.yourapp',
+  appleRootCertificates,
   environment: 'sandbox' // or 'production'
 };
 
@@ -60,8 +79,13 @@ const configWithEnv = {
   issuerId: process.env.APPLE_ISSUER_ID!,
   keyId: process.env.APPLE_KEY_ID!,
   privateKey: process.env.APPLE_PRIVATE_KEY!,
-  bundleId: process.env.APPLE_BUNDLE_ID!
-  // environment is optional, will try production first, then sandbox if fails
+  bundleId: process.env.APPLE_BUNDLE_ID!,
+  appleRootCertificates: [process.env.APPLE_ROOT_CA_PATH!],
+  appAppleId: Number(process.env.APPLE_APP_ID),
+  // environment is optional. Auto mode falls back to sandbox only when
+  // Apple returns 4040010 (TransactionIdNotFoundError).
+  maxRetries: 2,
+  timeoutMs: 10_000
 };
 
 const storeKit = new AppleStoreKit(configWithPath); // or configWithContent or configWithEnv
@@ -82,8 +106,11 @@ const order = await storeKit.lookupOrder('orderId');
 // Check refund status
 const refund = await storeKit.refundLookup('transactionId');
 
-// Get current environment
-const currentEnv = storeKit.getCurrentEnvironment(); // 'production' or 'sandbox'
+// Inspect the configured mode
+const mode = storeKit.getConfiguredEnvironment(); // 'production', 'sandbox', or 'auto'
+
+// Resolve the environment for a specific transaction
+const transactionEnvironment = await storeKit.resolveTransactionEnvironment('transactionId');
 ```
 
 ## Configuration
@@ -134,6 +161,17 @@ The library accepts the private key in two formats:
    privateKey: '-----BEGIN PRIVATE KEY-----\nYOUR_KEY_CONTENT\n-----END PRIVATE KEY-----'
    ```
 
+### Signed Data Verification
+
+`verifyPurchase`, transaction history, order lookup, subscription helpers, and the
+`verifyAndDecode*` methods verify Apple's JWS signature and certificate chain before
+returning decoded data. Pass DER-encoded Apple root certificates as buffers or file
+paths. Production verification also requires `appAppleId`.
+
+Certificate revocation and current-date checks are enabled by default. Set
+`enableOnlineChecks: false` only when your deployment cannot perform the required
+online checks and you accept the reduced verification guarantees.
+
 ### Environment Detection
 
 The library supports automatic environment detection:
@@ -145,9 +183,11 @@ The library supports automatic environment detection:
      // environment not specified
    };
    ```
-   - First tries production environment
-   - If request fails, automatically retries with sandbox
-   - Useful during development and testing
+   - Transaction-based reads first try production
+   - The request falls back to sandbox only when Apple returns error `4040010` (`TransactionIdNotFoundError`)
+   - Authentication, validation, rate-limit, server, and network errors never cause an environment switch
+   - Write operations resolve the transaction environment first, then send the write to one environment
+   - Look Up Order ID never falls back because Apple doesn't provide that endpoint in sandbox
 
 2. **Manual Setting**:
    ```typescript
@@ -159,6 +199,29 @@ The library supports automatic environment detection:
    - Explicitly sets the environment
    - No automatic switching
    - Recommended for production use
+
+### Retry Policy
+
+Retries always stay in the same environment:
+
+- Selected transient network errors and HTTP `408`, `429`, `500`, `502`, `503`, and `504` use bounded exponential backoff
+- HTTP `429` honors Apple's `Retry-After` value when it is within `maxRetryDelayMs`
+- HTTP `400`, `401`, `403`, and other non-retryable responses fail immediately
+- GET requests retry by default; write endpoints opt in only when their semantics are idempotent
+
+```typescript
+const config = {
+  // ... credentials
+  maxRetries: 2,       // default: 2
+  retryBaseDelayMs: 250,
+  maxRetryDelayMs: 5000,
+  timeoutMs: 10_000
+};
+```
+
+Every request also accepts an `AbortSignal` through its options where options are
+available. Pagination helpers stop at 100 pages or 20,000 items by default; override
+these bounds with `maxPages` and `maxItems`.
 
 ## API Methods
 
@@ -188,13 +251,86 @@ This method returns the current status of a subscription, including:
 
 ### Purchases
 - `verifyPurchase(transactionId: string)`: Verify a specific purchase using StoreKit 2 API
-- `getTransactionHistory(transactionId: string)`: Get transaction history
+- `getTransactionHistory(anyTransactionId, request?, options?)`: Get and verify bounded V2 transaction history
+- `iterateTransactionHistory(anyTransactionId, request?, options?)`: Stream verified transactions
+- `getTransactionHistoryPage(anyTransactionId, request?, revision?, environment?)`: Get one V2 history page
+- `getAppTransactionInfo(anyTransactionId)`: Get the signed app transaction
+- `getVerifiedAppTransactionInfo(anyTransactionId)`: Get the verified app transaction
+- `finishTransaction(transactionId)`: Mark server-side transaction processing as finished
 - `lookupOrder(orderId: string)`: Look up order details
-- `refundLookup(transactionId: string)`: Check refund status
+- `getRefundHistory(anyTransactionId, options?)`: Get bounded V2 refund history pages
+- `iterateRefundHistoryPages(anyTransactionId, options?)`: Stream V2 refund history pages
+- `getRefundHistoryPage(anyTransactionId, revision?, environment?)`: Get one V2 refund page
+- `refundLookup(anyTransactionId)`: Deprecated alias for `getRefundHistory`
 - `setAppAccountToken(originalTransactionId: string, appAccountToken: string)`: Set or update app account token for a transaction
 
+Transaction history supports Apple filters:
+
+```typescript
+const history = await storeKit.getTransactionHistory('transaction-id', {
+  startDate: Date.now() - 30 * 24 * 60 * 60 * 1000,
+  productIds: ['com.example.product'],
+  productTypes: [TransactionProductType.AUTO_RENEWABLE],
+  sort: TransactionHistoryOrder.DESCENDING,
+  revoked: false
+});
+```
+
+### Subscription Status and Renewal Extensions
+
+- `getAllSubscriptionStatuses(anyTransactionId, statuses?)`: Return Apple's complete status response with optional repeated status filters
+- `getSubscriptionStatus(originalTransactionId)`: Return an exact matching status, or fail if the response is ambiguous
+- `extendSubscriptionRenewalDate(originalTransactionId, request)`
+- `extendRenewalDateForAllActiveSubscribers(request, options?)`
+- `getStatusOfSubscriptionRenewalDateExtensions(requestIdentifier, productId, options?)`
+
+For endpoints without a transaction ID, pass an explicit environment. Auto mode
+throws instead of silently selecting production for these endpoints.
+
+### App Store Server Notifications
+
+- `getNotificationHistory(request, paginationToken?, options?)`: Get one notification-history page
+- `getAllNotificationHistory(request, options?)`: Get all notification-history pages
+- `iterateNotificationHistoryPages(request, options?)`: Stream notification-history pages
+- `requestTestNotification(options?)`: Request a test notification
+- `getTestNotificationStatus(testNotificationToken, options?)`: Check a test notification
+
+```typescript
+const notifications = await storeKit.getAllNotificationHistory(
+  { startDate, endDate, onlyFailures: true },
+  { environment: 'sandbox' }
+);
+```
+
+### Retention Messaging
+
+Image endpoints:
+
+- `uploadImage(imageIdentifier, image, imageSize?, options?)`
+- `deleteImage(imageIdentifier, options?)`
+- `getImageList(options?)`
+
+Message and default-configuration endpoints:
+
+- `uploadMessage(messageIdentifier, request, options?)`
+- `deleteMessage(messageIdentifier, options?)`
+- `getMessageList(options?)`
+- `configureDefaultMessage(productId, locale, request, options?)`
+- `deleteDefaultMessage(productId, locale, options?)`
+- `getDefaultMessage(productId, locale, options?)`
+
+Realtime URL and sandbox performance-test endpoints:
+
+- `configureRealtimeURL(request, options?)`
+- `deleteRealtimeURL(options?)`
+- `getRealtimeURL(options?)`
+- `initiatePerformanceTest(request)`
+- `getPerformanceTestResults(requestId)`
+
+Performance tests always use Apple's sandbox environment. Image uploads use `image/png`, and repeated query parameters are encoded in Apple's expected format.
+
 ### Consumption Information
-- `sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information for refund decisions
+- `sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information using the deprecated V1 endpoint
 - `sendConsumptionInformationV2(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information using V2 API
 
 The `ConsumptionRequest` interface includes required and optional fields with their corresponding enum values:
@@ -368,7 +504,9 @@ await storeKit.sendConsumptionInformation('transactionId', consumptionData);
    - Implement proper error handling for API responses
 
 ### Utility
-- `getCurrentEnvironment()`: Get the current environment being used
+- `getConfiguredEnvironment()`: Get `'production'`, `'sandbox'`, or `'auto'`
+- `resolveTransactionEnvironment(transactionId: string)`: Resolve the environment for one transaction
+- `getCurrentEnvironment()`: Deprecated alias for `getConfiguredEnvironment()`
 - `getAccountTenure(date: Date)`: Calculate the account tenure enum value based on account creation date
 
 ## Security Best Practices
@@ -381,8 +519,10 @@ await storeKit.sendConsumptionInformation('transactionId', consumptionData);
      const config = {
        issuerId: process.env.APPLE_ISSUER_ID,
        keyId: process.env.APPLE_KEY_ID,
-       privateKey: process.env.APPLE_PRIVATE_KEY,
-       bundleId: process.env.APPLE_BUNDLE_ID
+      privateKey: process.env.APPLE_PRIVATE_KEY,
+      bundleId: process.env.APPLE_BUNDLE_ID,
+      appleRootCertificates: [process.env.APPLE_ROOT_CA_PATH],
+      appAppleId: Number(process.env.APPLE_APP_ID)
      };
      ```
 
@@ -394,10 +534,10 @@ await storeKit.sendConsumptionInformation('transactionId', consumptionData);
 ## Compatibility
 
 This library is compatible with:
-- Node.js versions 10.24.1 and above
-- TypeScript 4.9.x and above
+- Node.js versions 22 and 24
+- TypeScript 5.9.x and above
 - All major Node.js frameworks (Express, Koa, Nest.js, etc.)
-- Both CommonJS and ES Modules
+- CommonJS packages and TypeScript declarations
 
 ### Set App Account Token
 
@@ -407,7 +547,7 @@ Sets or updates the app account token for a transaction made outside of your app
 try {
   await storeKit.setAppAccountToken(
     'original-transaction-id',
-    'user-account-uuid'
+    '00000000-0000-4000-8000-000000000001'
   );
   console.log('App account token updated successfully');
 } catch (error) {
@@ -446,4 +586,4 @@ MIT
 
 ## Support
 
-For issues and feature requests, please use the GitHub issue tracker. 
+For issues and feature requests, please use the GitHub issue tracker.
