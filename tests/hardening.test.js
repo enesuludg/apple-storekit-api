@@ -92,6 +92,19 @@ test('purchase verification uses the environment that served the response', asyn
   assert.deepEqual(environments, ['production']);
 });
 
+test('the deprecated facade decoder remains available and verifies signed data', async () => {
+  const environments = [];
+  const storeKit = new AppleStoreKit(config({
+    environment: 'sandbox',
+    signedDataVerifierFactory: verifierFactory(environments)
+  }));
+
+  const transaction = await storeKit.decodeSignedData('signed');
+
+  assert.equal(transaction.transactionId, 'verified-transaction');
+  assert.deepEqual(environments, ['sandbox']);
+});
+
 test('timeout and AbortSignal are forwarded to the HTTP adapter', async () => {
   let requestConfig;
   const controller = new AbortController();
@@ -172,6 +185,49 @@ test('non-transient HTTP 5xx responses are not retried', async () => {
 
   await assert.rejects(() => client.makeRequest('get', '/test'));
   assert.equal(calls, 1);
+});
+
+test('non-idempotent retention mutations are never retried', async () => {
+  const calls = new Map();
+  const storeKit = new AppleStoreKit(config({
+    environment: 'production',
+    maxRetries: 3,
+    retryBaseDelayMs: 0,
+    maxRetryDelayMs: 0,
+    httpClient: {
+      request: async request => {
+        const key = `${request.method} ${new URL(request.url).pathname}`;
+        calls.set(key, (calls.get(key) || 0) + 1);
+        throw axiosNetworkError('ECONNRESET');
+      }
+    }
+  }));
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const operations = [
+    [
+      'put /inApps/v1/messaging/image/image-id',
+      () => storeKit.uploadImage('image-id', png)
+    ],
+    [
+      'delete /inApps/v1/messaging/image/image-id',
+      () => storeKit.deleteImage('image-id')
+    ],
+    [
+      'put /inApps/v1/messaging/message/message-id',
+      () => storeKit.uploadMessage('message-id', { header: 'Header', body: 'Body' })
+    ],
+    [
+      'delete /inApps/v1/messaging/message/message-id',
+      () => storeKit.deleteMessage('message-id')
+    ]
+  ];
+
+  for (const [, invoke] of operations) {
+    await assert.rejects(invoke, /ECONNRESET/);
+  }
+  for (const [key] of operations) {
+    assert.equal(calls.get(key), 1, `${key} must not be retried`);
+  }
 });
 
 test('transaction aggregation stops at maxPages', async () => {

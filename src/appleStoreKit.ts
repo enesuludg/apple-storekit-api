@@ -116,6 +116,17 @@ export class AppleStoreKit {
     return this.client.verifyAndDecodeAppTransaction(signedData, environment);
   }
 
+  /**
+   * @deprecated Use verifyAndDecodeTransaction() and pass the request environment.
+   * This method verifies the JWS and is therefore asynchronous.
+   */
+  decodeSignedData(
+    signedData: string,
+    environment?: StoreEnvironment
+  ): Promise<TransactionInfo> {
+    return this.client.decodeSignedData(signedData, environment);
+  }
+
   // Subscription methods
   async getSubscriptionStatus(
     originalTransactionId: string,

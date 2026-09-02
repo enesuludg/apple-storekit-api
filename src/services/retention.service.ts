@@ -44,7 +44,7 @@ export class RetentionService {
         environment,
         query: { imageSize },
         contentType: 'image/png',
-        retry: true,
+        retry: false,
         signal: options.signal,
         timeoutMs: options.timeoutMs
       }
@@ -61,7 +61,7 @@ export class RetentionService {
       'delete',
       `/inApps/v1/messaging/image/${encodedImageIdentifier}`,
       undefined,
-      { environment, retry: true, signal: options.signal, timeoutMs: options.timeoutMs }
+      { environment, retry: false, signal: options.signal, timeoutMs: options.timeoutMs }
     );
   }
 
@@ -89,7 +89,7 @@ export class RetentionService {
       'put',
       `/inApps/v1/messaging/message/${encodedMessageIdentifier}`,
       request,
-      { environment, retry: true, signal: options.signal, timeoutMs: options.timeoutMs }
+      { environment, retry: false, signal: options.signal, timeoutMs: options.timeoutMs }
     );
   }
 
@@ -103,7 +103,7 @@ export class RetentionService {
       'delete',
       `/inApps/v1/messaging/message/${encodedMessageIdentifier}`,
       undefined,
-      { environment, retry: true, signal: options.signal, timeoutMs: options.timeoutMs }
+      { environment, retry: false, signal: options.signal, timeoutMs: options.timeoutMs }
     );
   }
 

@@ -34,15 +34,37 @@ See [CHANGES.md](./CHANGES.md) for release notes and migration guidance.
 - `AppleStoreKit` uses composition and no longer exposes low-level transport methods.
 - Endpoints without a transaction identifier require an explicit environment in auto mode.
 - The supported runtime is Node.js 22 or newer.
+- TypeScript consumers require TypeScript 5.2 or newer.
+- Package-root imports remain the supported API. An explicit compatibility allowlist
+  preserves the `dist/...` paths that were shipped by v1.
 
 ## Requirements
 
 - Node.js >= 22
+- TypeScript >= 5.2 when consuming the package from TypeScript
 - App Store Connect API access
 - Private key in `.p8` format (file or content)
 - Issuer ID and Key ID
 - Apple root certificates from [Apple PKI](https://www.apple.com/certificateauthority/)
 - App Apple ID for production signed-data verification
+
+### Imports and v1 deep-import compatibility
+
+Import the facade, errors, and public interfaces from the package root:
+
+```typescript
+import { AppleStoreKit, AppleStoreKitApiError } from 'apple-storekit-api';
+```
+
+Import public interfaces from the package root as well:
+
+```typescript
+import type { AppleStoreKitConfig, TransactionInfo } from 'apple-storekit-api';
+```
+
+The exact `dist/...` paths published by v1 remain resolvable so existing applications
+can migrate incrementally. They are deprecated compatibility entrypoints, not a stable
+service-level API; new code should import from `apple-storekit-api`.
 
 ## Usage
 
@@ -535,7 +557,7 @@ await storeKit.sendConsumptionInformation('transactionId', consumptionData);
 
 This library is compatible with:
 - Node.js versions 22 and 24
-- TypeScript 5.9.x and above
+- TypeScript 5.2 and above
 - All major Node.js frameworks (Express, Koa, Nest.js, etc.)
 - CommonJS packages and TypeScript declarations
 

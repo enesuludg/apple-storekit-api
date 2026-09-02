@@ -25,6 +25,7 @@ and broader App Store Server API coverage.
 - `RenewalInfo` now uses Apple's official `JWSRenewalInfoDecodedPayload` type.
 - Invalid JWS data now throws `AppleStoreKitVerificationError` instead of returning
   `null`.
+- TypeScript consumers now require TypeScript `5.2` or newer.
 
 ### Migration
 
@@ -62,6 +63,13 @@ const storeKit = new AppleStoreKit({
 
 Download trusted Apple root certificates from
 [Apple PKI](https://www.apple.com/certificateauthority/).
+
+Applications that subclassed `AppleStoreKit` to access `BaseService` internals need
+to migrate to the public facade methods. Package-root imports remain unchanged. The
+exact v1 `dist/...` deep imports are preserved through a deprecated compatibility
+allowlist so applications can migrate incrementally, but service implementation
+details and subclass behavior are not part of the v2 API. New code should import
+public classes and types from `apple-storekit-api`.
 
 ### Signed-data verification
 
@@ -102,6 +110,8 @@ Download trusted Apple root certificates from
 - Reduced App Store Connect JWT lifetime to five minutes and added short-lived caching.
 - GET requests retry by default.
 - Write endpoints opt in to retries only when their semantics are idempotent.
+- Non-idempotent Retention Messaging image and message upload/delete operations never
+  retry automatically; callers receive the original uncertain network result.
 - Retryable HTTP statuses are limited to `408`, `429`, `500`, `502`, `503`, and `504`.
 - Permanent DNS, TLS, and unknown network failures are not retried automatically.
 - A `Retry-After` value above `maxRetryDelayMs` prevents a retry.
@@ -261,9 +271,10 @@ interface AppleStoreKitApiError {
 - Removed the duplicated legacy `package/` directory.
 - Added GitHub Actions CI for Node.js 22 and 24.
 - Added runtime, type-level, and coverage tests.
-- The test suite contains 21 tests.
+- Added installed-tarball consumer tests for CommonJS, ESM, TypeScript 5.2, current
+  TypeScript, and the v1 compatibility entrypoints.
 - Enforced minimum coverage thresholds:
   - Lines: `75%`
   - Branches: `70%`
   - Functions: `75%`
-- Package contents are validated with `publint` and `npm pack --dry-run`.
+- Package contents are validated in CI with `publint` and `npm pack --dry-run`.

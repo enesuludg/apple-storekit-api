@@ -10,7 +10,143 @@
       "types": "./dist/index.d.ts",
       "require": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./dist": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./dist/index": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./dist/index.js": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./dist/appleStoreKit": {
+      "types": "./dist/appleStoreKit.d.ts",
+      "require": "./dist/appleStoreKit.js",
+      "default": "./dist/appleStoreKit.js"
+    },
+    "./dist/appleStoreKit.js": {
+      "types": "./dist/appleStoreKit.d.ts",
+      "require": "./dist/appleStoreKit.js",
+      "default": "./dist/appleStoreKit.js"
+    },
+    "./dist/interfaces": {
+      "types": "./dist/interfaces/index.d.ts",
+      "require": "./dist/interfaces/index.js",
+      "default": "./dist/interfaces/index.js"
+    },
+    "./dist/interfaces/index": {
+      "types": "./dist/interfaces/index.d.ts",
+      "require": "./dist/interfaces/index.js",
+      "default": "./dist/interfaces/index.js"
+    },
+    "./dist/interfaces/index.js": {
+      "types": "./dist/interfaces/index.d.ts",
+      "require": "./dist/interfaces/index.js",
+      "default": "./dist/interfaces/index.js"
+    },
+    "./dist/interfaces/config": {
+      "types": "./dist/interfaces/config.d.ts",
+      "require": "./dist/interfaces/config.js",
+      "default": "./dist/interfaces/config.js"
+    },
+    "./dist/interfaces/config.js": {
+      "types": "./dist/interfaces/config.d.ts",
+      "require": "./dist/interfaces/config.js",
+      "default": "./dist/interfaces/config.js"
+    },
+    "./dist/interfaces/consumption": {
+      "types": "./dist/interfaces/consumption.d.ts",
+      "require": "./dist/interfaces/consumption.js",
+      "default": "./dist/interfaces/consumption.js"
+    },
+    "./dist/interfaces/consumption.js": {
+      "types": "./dist/interfaces/consumption.d.ts",
+      "require": "./dist/interfaces/consumption.js",
+      "default": "./dist/interfaces/consumption.js"
+    },
+    "./dist/interfaces/subscription": {
+      "types": "./dist/interfaces/subscription.d.ts",
+      "require": "./dist/interfaces/subscription.js",
+      "default": "./dist/interfaces/subscription.js"
+    },
+    "./dist/interfaces/subscription.js": {
+      "types": "./dist/interfaces/subscription.d.ts",
+      "require": "./dist/interfaces/subscription.js",
+      "default": "./dist/interfaces/subscription.js"
+    },
+    "./dist/interfaces/transaction": {
+      "types": "./dist/interfaces/transaction.d.ts",
+      "require": "./dist/interfaces/transaction.js",
+      "default": "./dist/interfaces/transaction.js"
+    },
+    "./dist/interfaces/transaction.js": {
+      "types": "./dist/interfaces/transaction.d.ts",
+      "require": "./dist/interfaces/transaction.js",
+      "default": "./dist/interfaces/transaction.js"
+    },
+    "./dist/services": {
+      "types": "./dist/services/index.d.ts",
+      "require": "./dist/services/index.js",
+      "default": "./dist/services/index.js"
+    },
+    "./dist/services/index": {
+      "types": "./dist/services/index.d.ts",
+      "require": "./dist/services/index.js",
+      "default": "./dist/services/index.js"
+    },
+    "./dist/services/index.js": {
+      "types": "./dist/services/index.d.ts",
+      "require": "./dist/services/index.js",
+      "default": "./dist/services/index.js"
+    },
+    "./dist/services/base.service": {
+      "types": "./dist/services/base.service.d.ts",
+      "require": "./dist/services/base.service.js",
+      "default": "./dist/services/base.service.js"
+    },
+    "./dist/services/base.service.js": {
+      "types": "./dist/services/base.service.d.ts",
+      "require": "./dist/services/base.service.js",
+      "default": "./dist/services/base.service.js"
+    },
+    "./dist/services/consumption.service": {
+      "types": "./dist/services/consumption.service.d.ts",
+      "require": "./dist/services/consumption.service.js",
+      "default": "./dist/services/consumption.service.js"
+    },
+    "./dist/services/consumption.service.js": {
+      "types": "./dist/services/consumption.service.d.ts",
+      "require": "./dist/services/consumption.service.js",
+      "default": "./dist/services/consumption.service.js"
+    },
+    "./dist/services/subscription.service": {
+      "types": "./dist/services/subscription.service.d.ts",
+      "require": "./dist/services/subscription.service.js",
+      "default": "./dist/services/subscription.service.js"
+    },
+    "./dist/services/subscription.service.js": {
+      "types": "./dist/services/subscription.service.d.ts",
+      "require": "./dist/services/subscription.service.js",
+      "default": "./dist/services/subscription.service.js"
+    },
+    "./dist/services/transaction.service": {
+      "types": "./dist/services/transaction.service.d.ts",
+      "require": "./dist/services/transaction.service.js",
+      "default": "./dist/services/transaction.service.js"
+    },
+    "./dist/services/transaction.service.js": {
+      "types": "./dist/services/transaction.service.d.ts",
+      "require": "./dist/services/transaction.service.js",
+      "default": "./dist/services/transaction.service.js"
+    },
+    "./package.json": "./package.json"
   },
   "sideEffects": false,
   "files": [
@@ -25,8 +161,11 @@
     "dev": "ts-node examples/example.ts",
     "dev:watch": "nodemon --watch 'src/**/*.ts' --watch 'examples/**/*.ts' --exec 'ts-node' examples/example.ts",
     "typecheck": "tsc -p tsconfig.types.json",
-    "test": "npm run typecheck && npm run build && node --test tests/*.test.js",
-    "test:coverage": "npm run typecheck && npm run build && node --experimental-test-coverage --test-coverage-lines=75 --test-coverage-branches=70 --test-coverage-functions=75 --test tests/*.test.js",
+    "typecheck:package": "node node_modules/typescript-5-2/bin/tsc -p tsconfig.package-types.json",
+    "test": "npm run build && npm run typecheck && npm run typecheck:package && node --test tests/*.test.js",
+    "test:package": "npm run build && node tests/package-consumer.js",
+    "test:coverage": "npm run build && npm run typecheck && npm run typecheck:package && node --experimental-test-coverage --test-coverage-lines=75 --test-coverage-branches=70 --test-coverage-functions=75 --test tests/*.test.js",
+    "check:package": "npm run build && publint && npm pack --dry-run --ignore-scripts",
     "prepack": "npm test",
     "audit:prod": "npm audit --omit=dev"
   },
@@ -58,8 +197,10 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.20.1",
     "nodemon": "^3.1.14",
+    "publint": "^0.3.24",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-5-2": "npm:typescript@5.2.2"
   },
   "repository": {
     "type": "git",

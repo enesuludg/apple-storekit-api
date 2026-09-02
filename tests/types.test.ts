@@ -29,6 +29,12 @@ async function consumerUsage(): Promise<void> {
   );
   transaction.productId?.toUpperCase();
 
+  const decoded: TransactionInfo = await client.decodeSignedData(
+    'signed-transaction',
+    'sandbox'
+  );
+  decoded.transactionId?.toString();
+
   for await (const item of client.iterateTransactionHistory(
     'transaction-id',
     {},
