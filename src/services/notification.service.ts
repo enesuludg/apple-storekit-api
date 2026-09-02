@@ -14,7 +14,11 @@ import {
   assertCanFetchPage,
   resolvePaginationLimits
 } from './pagination';
-import { encodePathSegment, requireNonEmptyString, validateDateRange } from './validation';
+import {
+  encodePathSegment,
+  requireNonEmptyString,
+  validateRequiredDateRange
+} from './validation';
 
 export class NotificationService {
   private readonly client: StoreKitClient;
@@ -28,13 +32,7 @@ export class NotificationService {
     paginationToken?: string,
     options: StoreKitEnvironmentOptions = {}
   ): Promise<NotificationHistoryResponse> {
-    validateDateRange(request.startDate, request.endDate, 'Notification history');
-    if (request.notificationType !== undefined) {
-      requireNonEmptyString(request.notificationType, 'notificationType');
-    }
-    if (request.notificationSubtype !== undefined) {
-      requireNonEmptyString(request.notificationSubtype, 'notificationSubtype');
-    }
+    this.validateHistoryRequest(request);
     const environment = await this.resolveEnvironment(
       options.environment,
       request.transactionId,
@@ -86,6 +84,7 @@ export class NotificationService {
     request: NotificationHistoryRequest,
     options: StoreKitPaginationOptions = {}
   ): AsyncGenerator<NotificationHistoryResponse, void, void> {
+    this.validateHistoryRequest(request);
     const limits = resolvePaginationLimits(options);
     const environment = await this.resolveEnvironment(
       options.environment,
@@ -167,5 +166,27 @@ export class NotificationService {
     }
 
     return this.client.requireEnvironment(undefined, 'notification endpoints');
+  }
+
+  private validateHistoryRequest(request: NotificationHistoryRequest): void {
+    validateRequiredDateRange(request.startDate, request.endDate, 'Notification history');
+    if (request.onlyFailures !== undefined && typeof request.onlyFailures !== 'boolean') {
+      throw new TypeError('onlyFailures must be a boolean when provided.');
+    }
+    if (request.notificationType !== undefined) {
+      requireNonEmptyString(request.notificationType, 'notificationType');
+    }
+    if (request.notificationSubtype !== undefined) {
+      requireNonEmptyString(request.notificationSubtype, 'notificationSubtype');
+      if (request.notificationType === undefined) {
+        throw new TypeError('notificationSubtype requires notificationType.');
+      }
+    }
+    if (request.transactionId !== undefined) {
+      requireNonEmptyString(request.transactionId, 'transactionId');
+      if (request.notificationType !== undefined) {
+        throw new TypeError('transactionId and notificationType are mutually exclusive.');
+      }
+    }
   }
 }

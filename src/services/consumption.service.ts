@@ -1,8 +1,19 @@
 import {
+  AccountTenure,
   ConsumptionRequest,
+  ConsumptionRequestV1,
   ConsumptionResponse,
+  ConsumptionStatus,
   AppleStoreKitConfig,
-  StoreKitRequestControlOptions
+  DeliveryStatus,
+  DeliveryStatusV1,
+  LifetimeDollars,
+  Platform,
+  PlayTime,
+  RefundPreference,
+  RefundPreferenceV1,
+  StoreKitRequestControlOptions,
+  UserStatus
 } from '../interfaces';
 import { createStoreKitClient, StoreKitClient } from './base.service';
 import { encodePathSegment, requireUuid } from './validation';
@@ -23,22 +34,102 @@ export class ConsumptionService {
    */
   async sendConsumptionInformation(
     transactionId: string,
-    consumptionRequest: ConsumptionRequest,
+    consumptionRequest: ConsumptionRequestV1,
     control: StoreKitRequestControlOptions = {}
   ): Promise<void> {
-    if (!consumptionRequest.customerConsented) {
+    if (consumptionRequest.customerConsented !== true) {
       throw new Error('Customer consent is required to send consumption information');
     }
 
-    const environment = await this.client.resolveTransactionEnvironment(transactionId, control);
     const encodedTransactionId = encodePathSegment(transactionId, 'transactionId');
-    if (consumptionRequest.appAccountToken) {
+    if (typeof consumptionRequest.appAccountToken !== 'string') {
+      throw new TypeError('appAccountToken must be a string containing a UUID or an empty string');
+    }
+    if (consumptionRequest.appAccountToken !== '') {
       requireUuid(consumptionRequest.appAccountToken, 'appAccountToken');
     }
+    this.requireIntegerRange(
+      consumptionRequest.accountTenure,
+      AccountTenure.UNDECLARED,
+      AccountTenure.DAYS_OVER_365,
+      'accountTenure'
+    );
+    this.requireIntegerRange(
+      consumptionRequest.consumptionStatus,
+      ConsumptionStatus.UNDECLARED,
+      ConsumptionStatus.FULLY_CONSUMED,
+      'consumptionStatus'
+    );
+    this.requireIntegerRange(
+      consumptionRequest.deliveryStatus,
+      DeliveryStatusV1.DELIVERED_AND_WORKING_PROPERLY,
+      DeliveryStatusV1.DID_NOT_DELIVER_FOR_OTHER_REASON,
+      'deliveryStatus'
+    );
+    this.requireIntegerRange(
+      consumptionRequest.lifetimeDollarsPurchased,
+      LifetimeDollars.UNDECLARED,
+      LifetimeDollars.USD_OVER_2000,
+      'lifetimeDollarsPurchased'
+    );
+    this.requireIntegerRange(
+      consumptionRequest.lifetimeDollarsRefunded,
+      LifetimeDollars.UNDECLARED,
+      LifetimeDollars.USD_OVER_2000,
+      'lifetimeDollarsRefunded'
+    );
+    this.requireIntegerRange(
+      consumptionRequest.platform,
+      Platform.UNDECLARED,
+      Platform.NON_APPLE,
+      'platform'
+    );
+    this.requireIntegerRange(
+      consumptionRequest.playTime,
+      PlayTime.UNDECLARED,
+      PlayTime.DAYS_OVER_16,
+      'playTime'
+    );
+    this.requireIntegerRange(
+      consumptionRequest.userStatus,
+      UserStatus.UNDECLARED,
+      UserStatus.LIMITED_ACCESS,
+      'userStatus'
+    );
+    if (typeof consumptionRequest.sampleContentProvided !== 'boolean') {
+      throw new TypeError('sampleContentProvided must be a boolean');
+    }
+    if (consumptionRequest.refundPreference !== undefined) {
+      this.requireIntegerRange(
+        consumptionRequest.refundPreference,
+        RefundPreferenceV1.UNDECLARED,
+        RefundPreferenceV1.NO_PREFERENCE,
+        'refundPreference'
+      );
+    }
+
+    const requestBody: ConsumptionRequestV1 = {
+      accountTenure: consumptionRequest.accountTenure,
+      appAccountToken: consumptionRequest.appAccountToken,
+      consumptionStatus: consumptionRequest.consumptionStatus,
+      customerConsented: consumptionRequest.customerConsented,
+      deliveryStatus: consumptionRequest.deliveryStatus,
+      lifetimeDollarsPurchased: consumptionRequest.lifetimeDollarsPurchased,
+      lifetimeDollarsRefunded: consumptionRequest.lifetimeDollarsRefunded,
+      platform: consumptionRequest.platform,
+      playTime: consumptionRequest.playTime,
+      sampleContentProvided: consumptionRequest.sampleContentProvided,
+      userStatus: consumptionRequest.userStatus
+    };
+    if (consumptionRequest.refundPreference !== undefined) {
+      requestBody.refundPreference = consumptionRequest.refundPreference;
+    }
+
+    const environment = await this.client.resolveTransactionEnvironment(transactionId, control);
     await this.client.makeRequest(
       'put',
       `/inApps/v1/transactions/consumption/${encodedTransactionId}`,
-      consumptionRequest,
+      requestBody,
       { environment, retry: true, ...control }
     );
   }
@@ -55,36 +146,58 @@ export class ConsumptionService {
     consumptionRequest: ConsumptionRequest,
     control: StoreKitRequestControlOptions = {}
   ): Promise<ConsumptionResponse> {
-    // Validate required fields
-    if (consumptionRequest.customerConsented === undefined) {
-      throw new Error('customerConsented is required');
+    if (consumptionRequest.customerConsented !== true) {
+      throw new Error('Customer consent is required to send consumption information');
     }
-    if (consumptionRequest.deliveryStatus === undefined) {
-      throw new Error('deliveryStatus is required');
+    if (typeof consumptionRequest.deliveryStatus !== 'string' ||
+      consumptionRequest.deliveryStatus.trim().length === 0) {
+      throw new TypeError('deliveryStatus must be a non-empty string');
     }
-    if (consumptionRequest.sampleContentProvided === undefined) {
-      throw new Error('sampleContentProvided is required');
+    if (typeof consumptionRequest.sampleContentProvided !== 'boolean') {
+      throw new TypeError('sampleContentProvided must be a boolean');
+    }
+    if (consumptionRequest.refundPreference !== undefined &&
+      (typeof consumptionRequest.refundPreference !== 'string' ||
+        consumptionRequest.refundPreference.trim().length === 0)) {
+      throw new TypeError('refundPreference must be a non-empty string when provided');
     }
 
-    // Validate consumptionPercentage if provided
     if (consumptionRequest.consumptionPercentage !== undefined) {
-      if (consumptionRequest.consumptionPercentage < 0 || consumptionRequest.consumptionPercentage > 100000) {
-        throw new Error('consumptionPercentage must be between 0 and 100000');
+      if (
+        !Number.isInteger(consumptionRequest.consumptionPercentage) ||
+        consumptionRequest.consumptionPercentage < 0 ||
+        consumptionRequest.consumptionPercentage > 100000
+      ) {
+        throw new Error('consumptionPercentage must be an integer between 0 and 100000');
       }
     }
-    if (consumptionRequest.appAccountToken) {
-      requireUuid(consumptionRequest.appAccountToken, 'appAccountToken');
+    if (consumptionRequest.deliveryStatus !== DeliveryStatus.DELIVERED &&
+      consumptionRequest.consumptionPercentage !== undefined &&
+      consumptionRequest.consumptionPercentage !== 0) {
+      throw new RangeError(
+        'consumptionPercentage must be 0 when deliveryStatus is not DELIVERED'
+      );
+    }
+    if (consumptionRequest.refundPreference === RefundPreference.GRANT_PRORATED &&
+      consumptionRequest.consumptionPercentage !== undefined &&
+      (consumptionRequest.consumptionPercentage === 0 ||
+        consumptionRequest.consumptionPercentage === 100000)) {
+      throw new RangeError(
+        'consumptionPercentage must be greater than 0 and less than 100000 when refundPreference is GRANT_PRORATED'
+      );
     }
 
-    // If customer did not consent, only send required fields with customerConsented: false
-    // Apple only uses consumption data if customerConsented is true
-    const requestBody = consumptionRequest.customerConsented === false
-      ? {
-        customerConsented: false,
-        deliveryStatus: consumptionRequest.deliveryStatus,
-        sampleContentProvided: consumptionRequest.sampleContentProvided
-      }
-      : consumptionRequest;
+    const requestBody: ConsumptionRequest = {
+      customerConsented: consumptionRequest.customerConsented,
+      deliveryStatus: consumptionRequest.deliveryStatus,
+      sampleContentProvided: consumptionRequest.sampleContentProvided
+    };
+    if (consumptionRequest.consumptionPercentage !== undefined) {
+      requestBody.consumptionPercentage = consumptionRequest.consumptionPercentage;
+    }
+    if (consumptionRequest.refundPreference !== undefined) {
+      requestBody.refundPreference = consumptionRequest.refundPreference;
+    }
 
     const environment = await this.client.resolveTransactionEnvironment(transactionId, control);
     const encodedTransactionId = encodePathSegment(transactionId, 'transactionId');
@@ -100,5 +213,16 @@ export class ConsumptionService {
       transactionId,
       statusCode: response.statusCode
     };
+  }
+
+  private requireIntegerRange(
+    value: unknown,
+    minimum: number,
+    maximum: number,
+    name: string
+  ): void {
+    if (!Number.isInteger(value) || Number(value) < minimum || Number(value) > maximum) {
+      throw new RangeError(`${name} must be an integer between ${minimum} and ${maximum}`);
+    }
   }
 }

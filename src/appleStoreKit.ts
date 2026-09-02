@@ -6,6 +6,7 @@ import type {
 import { 
   AppleStoreKitConfig,
   ConsumptionRequest,
+  ConsumptionRequestV1,
   AccountTenure,
   AppTransactionInfoResponse,
   AppleSubscriptionResponse,
@@ -269,7 +270,7 @@ export class AppleStoreKit {
   // Consumption methods
   async sendConsumptionInformation(
     transactionId: string,
-    consumptionRequest: ConsumptionRequest,
+    consumptionRequest: ConsumptionRequestV1,
     control: StoreKitRequestControlOptions = {}
   ) {
     return this.consumptionService.sendConsumptionInformation(

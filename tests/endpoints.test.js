@@ -2,10 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { generateKeyPairSync } = require('node:crypto');
 const { AppleStoreKit } = require('../dist/appleStoreKit');
+const { createPng } = require('./png-fixture');
 
 const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
 const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' });
 const requestIdentifier = '00000000-0000-4000-8000-000000000001';
+const imageIdentifier = '00000000-0000-4000-8000-000000000002';
+const messageIdentifier = '00000000-0000-4000-8000-000000000003';
+const performanceRequestId = '00000000-0000-4000-8000-000000000004';
+const fullSizePng = createPng(3840, 160);
 
 function createStoreKit(environment = 'production', request) {
   return new AppleStoreKit({
@@ -182,17 +187,17 @@ test('all Retention Messaging endpoints are wired', async () => {
     return { status: 200, data: {} };
   });
   await storeKit.uploadImage(
-    'image-id',
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    imageIdentifier,
+    fullSizePng,
     'FULL_SIZE'
   );
-  await storeKit.deleteImage('image-id');
+  await storeKit.deleteImage(imageIdentifier);
   await storeKit.getImageList();
-  await storeKit.uploadMessage('message-id', { header: 'Header', body: 'Body' });
-  await storeKit.deleteMessage('message-id');
+  await storeKit.uploadMessage(messageIdentifier, { header: 'Header', body: 'Body' });
+  await storeKit.deleteMessage(messageIdentifier);
   await storeKit.getMessageList();
   await storeKit.configureDefaultMessage('product-id', 'en-US', {
-    messageIdentifier: 'message-id'
+    messageIdentifier
   });
   await storeKit.deleteDefaultMessage('product-id', 'en-US');
   await storeKit.getDefaultMessage('product-id', 'en-US');
@@ -200,14 +205,14 @@ test('all Retention Messaging endpoints are wired', async () => {
   await storeKit.deleteRealtimeURL();
   await storeKit.getRealtimeURL();
   await storeKit.initiatePerformanceTest({ originalTransactionId: 'transaction' });
-  await storeKit.getPerformanceTestResults('performance-request');
+  await storeKit.getPerformanceTestResults(performanceRequestId);
 
   const expected = [
-    ['put', '/inApps/v1/messaging/image/image-id'],
-    ['delete', '/inApps/v1/messaging/image/image-id'],
+    ['put', `/inApps/v1/messaging/image/${imageIdentifier}`],
+    ['delete', `/inApps/v1/messaging/image/${imageIdentifier}`],
     ['get', '/inApps/v1/messaging/image/list'],
-    ['put', '/inApps/v1/messaging/message/message-id'],
-    ['delete', '/inApps/v1/messaging/message/message-id'],
+    ['put', `/inApps/v1/messaging/message/${messageIdentifier}`],
+    ['delete', `/inApps/v1/messaging/message/${messageIdentifier}`],
     ['get', '/inApps/v1/messaging/message/list'],
     ['put', '/inApps/v1/messaging/default/product-id/en-US'],
     ['delete', '/inApps/v1/messaging/default/product-id/en-US'],
@@ -216,7 +221,7 @@ test('all Retention Messaging endpoints are wired', async () => {
     ['delete', '/inApps/v1/messaging/realtime/url'],
     ['get', '/inApps/v1/messaging/realtime/url'],
     ['post', '/inApps/v1/messaging/performanceTest'],
-    ['get', '/inApps/v1/messaging/performanceTest/result/performance-request']
+    ['get', `/inApps/v1/messaging/performanceTest/result/${performanceRequestId}`]
   ];
 
   assert.deepEqual(

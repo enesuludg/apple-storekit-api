@@ -1,5 +1,5 @@
 import { AppleStoreKit } from '../src';
-import { ConsumptionStatus, Platform, DeliveryStatus } from '../src/interfaces';
+import { DeliveryStatus } from '../src/interfaces';
 import { readFileSync } from 'node:fs';
 
 const config = {
@@ -35,16 +35,15 @@ async function main() {
     const refund = await storeKit.refundLookup('transaction-id');
     console.log('Refund:', refund);
 
-    // Send consumption information
+    // Send V2 consumption information
     const consumptionData = {
       customerConsented: true,
-      consumptionStatus: ConsumptionStatus.FULLY_CONSUMED,
-      platform: Platform.APPLE,
       sampleContentProvided: false,
-      deliveryStatus: DeliveryStatus.DELIVERED
+      deliveryStatus: DeliveryStatus.DELIVERED,
+      consumptionPercentage: 100_000
     };
 
-    await storeKit.sendConsumptionInformation('transaction-id', consumptionData);
+    await storeKit.sendConsumptionInformationV2('transaction-id', consumptionData);
     console.log('Consumption information sent successfully');
 
   } catch (error) {

@@ -1,13 +1,7 @@
 import { AppleStoreKit } from '../src/appleStoreKit';
 import { readFileSync } from 'node:fs';
 import { 
-  ConsumptionStatus, 
-  Platform, 
-  DeliveryStatus,
-  AccountTenure,
-  PlayTime,
-  LifetimeDollars,
-  UserStatus
+  DeliveryStatus
 } from '../src/interfaces';
 
 // Example with file path
@@ -68,22 +62,15 @@ async function example() {
     const history = await storeKit.getTransactionHistory('TRANSACTION_ID');
     console.log('Transaction History:', history);
 
-    // Send consumption information (requires user consent)
+    // Send V2 consumption information (requires user consent)
     const consumptionData = {
       customerConsented: true, // Make sure you have obtained valid consent
-      consumptionStatus: ConsumptionStatus.FULLY_CONSUMED,
-      platform: Platform.APPLE,
       sampleContentProvided: true,
       deliveryStatus: DeliveryStatus.DELIVERED,
-      appAccountToken: 'YOUR_APP_ACCOUNT_TOKEN', // Optional: UUID for user account
-      accountTenure: AccountTenure.DAYS_180_365,
-      playTime: PlayTime.HOURS_1_6,
-      lifetimeDollarsRefunded: LifetimeDollars.USD_0,
-      lifetimeDollarsPurchased: LifetimeDollars.USD_50_99_99,
-      userStatus: UserStatus.ACTIVE
+      consumptionPercentage: 100_000
     };
     
-    await storeKit.sendConsumptionInformation('TRANSACTION_ID', consumptionData);
+    await storeKit.sendConsumptionInformationV2('TRANSACTION_ID', consumptionData);
     console.log('Consumption information sent successfully');
     // Verify purchase
     const purchase = await storeKit.verifyPurchase('TRANSACTION_ID');

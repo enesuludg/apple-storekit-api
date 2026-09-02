@@ -26,6 +26,10 @@ and broader App Store Server API coverage.
 - Invalid JWS data now throws `AppleStoreKitVerificationError` instead of returning
   `null`.
 - TypeScript consumers now require TypeScript `5.2` or newer.
+- The deprecated `sendConsumptionInformation()` V1 method now accepts the
+  Apple-compatible `ConsumptionRequestV1` type and numeric `DeliveryStatusV1` and
+  `RefundPreferenceV1` enums. Use `sendConsumptionInformationV2()` with
+  `ConsumptionRequest`, `DeliveryStatus`, and `RefundPreference` for the current API.
 
 ### Migration
 
@@ -70,6 +74,17 @@ exact v1 `dist/...` deep imports are preserved through a deprecated compatibilit
 allowlist so applications can migrate incrementally, but service implementation
 details and subclass behavior are not part of the v2 API. New code should import
 public classes and types from `apple-storekit-api`.
+
+### Security and request validation
+
+- StoreKit JWTs retain Apple's required `iat` claim, and request paths are constrained
+  to Apple's selected API origin before authorization headers are created.
+- Transport diagnostics are bounded and credential-redacted, including custom HTTP
+  adapter errors and automatic-environment attempt history.
+- Timeout and retry-delay values are validated against Node.js's safe timer range.
+- Consumption, renewal extension, notification history, and Retention Messaging
+  requests perform Apple-contract validation before network I/O. Retention PNG uploads
+  validate image type, dimensions, structure, and transparency constraints.
 
 ### Signed-data verification
 

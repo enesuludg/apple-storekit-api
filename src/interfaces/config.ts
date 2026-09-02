@@ -13,7 +13,7 @@ export type StoreEnvironmentMode = StoreEnvironment | 'auto';
 export interface StoreKitRequestControlOptions {
   /** Abort the active request and any retry backoff. */
   signal?: AbortSignal;
-  /** Per-request timeout in milliseconds. */
+  /** Per-request timeout in milliseconds (1 through 2147483647). */
   timeoutMs?: number;
 }
 
@@ -50,7 +50,7 @@ export interface StoreKitRequestOptions {
   retry?: boolean;
   /** Abort this request, including retry backoff, when the signal is aborted. */
   signal?: AbortSignal;
-  /** Per-request timeout in milliseconds. Overrides the client default. */
+  /** Per-request timeout in milliseconds (1 through 2147483647). Overrides the client default. */
   timeoutMs?: number;
 }
 
@@ -99,10 +99,10 @@ export interface AppleStoreKitConfig {
   environment?: StoreEnvironment;
   /** Maximum retries in the same environment for network, rate-limit, and retryable server errors. Default: 2 */
   maxRetries?: number;
-  /** Initial delay for exponential retry backoff, in milliseconds. Default: 250 */
+  /** Initial retry delay in milliseconds (0 through 2147483647). Default: 250 */
   retryBaseDelayMs?: number;
-  /** Maximum delay the client waits before a retry. Default: 5000 */
+  /** Maximum retry delay in milliseconds (0 through 2147483647). Default: 5000 */
   maxRetryDelayMs?: number;
-  /** HTTP request timeout in milliseconds. Default: 10000 */
+  /** HTTP request timeout in milliseconds (1 through 2147483647). Default: 10000 */
   timeoutMs?: number;
 }

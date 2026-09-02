@@ -4,6 +4,7 @@ import {
   DefaultRetentionMessageResponse,
   RetentionImageListResponse,
   RetentionImageSize,
+  RetentionHeaderPosition,
   RetentionMessageListResponse,
   RetentionPerformanceTestRequest,
   RetentionPerformanceTestResponse,
@@ -17,7 +18,9 @@ import { createStoreKitClient, StoreKitClient } from './base.service';
 import {
   encodePathSegment,
   requireHttpsUrl,
-  requireNonEmptyString
+  requireNonEmptyString,
+  requireStringMaxLength,
+  requireUuid
 } from './validation';
 
 export class RetentionService {
@@ -33,7 +36,9 @@ export class RetentionService {
     imageSize?: RetentionImageSize,
     options: StoreKitEnvironmentOptions = {}
   ): Promise<void> {
-    this.validatePng(image);
+    requireUuid(imageIdentifier, 'imageIdentifier');
+    this.validateImageSize(imageSize);
+    this.validatePng(image, imageSize);
     const encodedImageIdentifier = encodePathSegment(imageIdentifier, 'imageIdentifier');
     const environment = this.resolveEnvironment(options, 'retention image upload');
     await this.client.makeRequest<void>(
@@ -55,6 +60,7 @@ export class RetentionService {
     imageIdentifier: string,
     options: StoreKitEnvironmentOptions = {}
   ): Promise<void> {
+    requireUuid(imageIdentifier, 'imageIdentifier');
     const encodedImageIdentifier = encodePathSegment(imageIdentifier, 'imageIdentifier');
     const environment = this.resolveEnvironment(options, 'retention image deletion');
     await this.client.makeRequest<void>(
@@ -82,6 +88,7 @@ export class RetentionService {
     request: UploadRetentionMessageRequest,
     options: StoreKitEnvironmentOptions = {}
   ): Promise<void> {
+    requireUuid(messageIdentifier, 'messageIdentifier');
     this.validateMessage(request);
     const encodedMessageIdentifier = encodePathSegment(messageIdentifier, 'messageIdentifier');
     const environment = this.resolveEnvironment(options, 'retention message upload');
@@ -97,6 +104,7 @@ export class RetentionService {
     messageIdentifier: string,
     options: StoreKitEnvironmentOptions = {}
   ): Promise<void> {
+    requireUuid(messageIdentifier, 'messageIdentifier');
     const encodedMessageIdentifier = encodePathSegment(messageIdentifier, 'messageIdentifier');
     const environment = this.resolveEnvironment(options, 'retention message deletion');
     await this.client.makeRequest<void>(
@@ -125,7 +133,7 @@ export class RetentionService {
     request: DefaultRetentionMessageRequest,
     options: StoreKitEnvironmentOptions = {}
   ): Promise<void> {
-    requireNonEmptyString(request.messageIdentifier, 'messageIdentifier');
+    requireUuid(request.messageIdentifier, 'messageIdentifier');
     const encodedProductId = encodePathSegment(productId, 'productId');
     const encodedLocale = encodePathSegment(this.validateLocale(locale), 'locale');
     const environment = this.resolveEnvironment(options, 'default retention message configuration');
@@ -174,6 +182,9 @@ export class RetentionService {
     options: StoreKitEnvironmentOptions = {}
   ): Promise<void> {
     requireHttpsUrl(request.realtimeURL, 'realtimeURL');
+    if (Array.from(request.realtimeURL).length > 256) {
+      throw new RangeError('realtimeURL must be at most 256 characters.');
+    }
     const environment = this.resolveEnvironment(options, 'retention realtime URL configuration');
     await this.client.makeRequest<void>(
       'put',
@@ -222,6 +233,7 @@ export class RetentionService {
   async getPerformanceTestResults(
     requestId: string
   ): Promise<RetentionPerformanceTestResultResponse> {
+    requireUuid(requestId, 'requestId');
     const encodedRequestId = encodePathSegment(requestId, 'requestId');
     return this.client.makeRequest<RetentionPerformanceTestResultResponse>(
       'get',
@@ -238,29 +250,133 @@ export class RetentionService {
     return this.client.requireEnvironment(options.environment, operation);
   }
 
-  private validatePng(image: Buffer): void {
+  private validateImageSize(imageSize: RetentionImageSize | undefined): void {
+    if (imageSize !== undefined &&
+      imageSize !== RetentionImageSize.FULL_SIZE &&
+      imageSize !== RetentionImageSize.BULLET_POINT) {
+      throw new TypeError('imageSize must be FULL_SIZE or BULLET_POINT.');
+    }
+  }
+
+  private validatePng(image: Buffer, imageSize: RetentionImageSize | undefined): void {
     const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
     if (!Buffer.isBuffer(image) ||
-      image.length < signature.length ||
+      image.length < 33 ||
       !signature.every((byte, index) => image[index] === byte)) {
-      throw new TypeError('image must be a non-empty PNG buffer.');
+      throw new TypeError('image must contain a supported PNG structure.');
+    }
+
+    let offset = signature.length;
+    let width: number | undefined;
+    let height: number | undefined;
+    let sawIdat = false;
+    let sawIend = false;
+
+    while (offset < image.length) {
+      if (image.length - offset < 12) {
+        throw new TypeError('image contains a truncated PNG chunk.');
+      }
+
+      const chunkLength = image.readUInt32BE(offset);
+      const chunkEnd = offset + 12 + chunkLength;
+      if (chunkEnd > image.length) {
+        throw new TypeError('image contains a truncated PNG chunk.');
+      }
+
+      const chunkType = image.toString('ascii', offset + 4, offset + 8);
+      if (!/^[A-Za-z]{4}$/.test(chunkType)) {
+        throw new TypeError('image contains an invalid PNG chunk type.');
+      }
+
+      if (offset === signature.length) {
+        if (chunkType !== 'IHDR' || chunkLength !== 13) {
+          throw new TypeError('image must begin with a 13-byte PNG IHDR chunk.');
+        }
+
+        width = image.readUInt32BE(offset + 8);
+        height = image.readUInt32BE(offset + 12);
+        const bitDepth = image[offset + 16];
+        const colorType = image[offset + 17];
+        const compressionMethod = image[offset + 18];
+        const filterMethod = image[offset + 19];
+        const interlaceMethod = image[offset + 20];
+        const validBitDepths: Readonly<Record<number, ReadonlyArray<number>>> = {
+          0: [1, 2, 4, 8, 16],
+          2: [8, 16],
+          3: [1, 2, 4, 8],
+          4: [8, 16],
+          6: [8, 16]
+        };
+
+        if (!width || !height ||
+          !validBitDepths[colorType]?.includes(bitDepth) ||
+          compressionMethod !== 0 ||
+          filterMethod !== 0 ||
+          ![0, 1].includes(interlaceMethod)) {
+          throw new TypeError('image contains an invalid PNG IHDR chunk.');
+        }
+        if (colorType === 4 || colorType === 6) {
+          throw new TypeError('image must not use a PNG color type with an alpha channel.');
+        }
+      } else if (chunkType === 'IHDR') {
+        throw new TypeError('image must contain exactly one PNG IHDR chunk.');
+      }
+
+      if (chunkType === 'tRNS') {
+        throw new TypeError('image must not contain PNG transparency data.');
+      }
+      if (chunkType === 'IDAT') {
+        sawIdat = true;
+      }
+      if (chunkType === 'IEND') {
+        if (chunkLength !== 0 || !sawIdat || chunkEnd !== image.length) {
+          throw new TypeError('image contains an invalid PNG IEND chunk.');
+        }
+        sawIend = true;
+        break;
+      }
+
+      offset = chunkEnd;
+    }
+
+    if (!sawIend || width === undefined || height === undefined) {
+      throw new TypeError('image must contain complete PNG IHDR, IDAT, and IEND chunks.');
+    }
+
+    const effectiveImageSize = imageSize || RetentionImageSize.FULL_SIZE;
+    if (effectiveImageSize === RetentionImageSize.FULL_SIZE &&
+      (width !== 3840 || height < 160 || height > 2160)) {
+      throw new RangeError(
+        'FULL_SIZE images must be 3840 pixels wide and 160 through 2160 pixels high.'
+      );
+    }
+    if (effectiveImageSize === RetentionImageSize.BULLET_POINT &&
+      (width !== 1024 || height !== 1024)) {
+      throw new RangeError('BULLET_POINT images must be exactly 1024 by 1024 pixels.');
     }
   }
 
   private validateMessage(request: UploadRetentionMessageRequest): void {
-    requireNonEmptyString(request.header, 'message header');
-    requireNonEmptyString(request.body, 'message body');
+    requireStringMaxLength(request.header, 'message header', 66);
+    requireStringMaxLength(request.body, 'message body', 144);
+    if (request.headerPosition === RetentionHeaderPosition.ABOVE_IMAGE && !request.image) {
+      throw new TypeError('message image is required when headerPosition is ABOVE_IMAGE.');
+    }
     if (request.image) {
-      requireNonEmptyString(request.image.imageIdentifier, 'image.imageIdentifier');
-      requireNonEmptyString(request.image.altText, 'image.altText');
+      requireUuid(request.image.imageIdentifier, 'image.imageIdentifier');
+      requireStringMaxLength(request.image.altText, 'image.altText', 150);
     }
     request.bulletPoints?.forEach((bulletPoint, index) => {
-      requireNonEmptyString(bulletPoint.text, `bulletPoints[${index}].text`);
-      requireNonEmptyString(
+      requireStringMaxLength(bulletPoint.text, `bulletPoints[${index}].text`, 66);
+      requireUuid(
         bulletPoint.imageIdentifier,
         `bulletPoints[${index}].imageIdentifier`
       );
-      requireNonEmptyString(bulletPoint.altText, `bulletPoints[${index}].altText`);
+      requireStringMaxLength(
+        bulletPoint.altText,
+        `bulletPoints[${index}].altText`,
+        150
+      );
     });
   }
 

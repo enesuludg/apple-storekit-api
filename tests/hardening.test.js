@@ -6,9 +6,13 @@ const {
   BaseService
 } = require('../dist/services/base.service');
 const { AppleStoreKit } = require('../dist/appleStoreKit');
+const { createPng } = require('./png-fixture');
 
 const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
 const privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+const imageIdentifier = '00000000-0000-4000-8000-000000000002';
+const messageIdentifier = '00000000-0000-4000-8000-000000000003';
+const fullSizePng = createPng(3840, 160);
 
 function config(overrides = {}) {
   return {
@@ -202,23 +206,22 @@ test('non-idempotent retention mutations are never retried', async () => {
       }
     }
   }));
-  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const operations = [
     [
-      'put /inApps/v1/messaging/image/image-id',
-      () => storeKit.uploadImage('image-id', png)
+      `put /inApps/v1/messaging/image/${imageIdentifier}`,
+      () => storeKit.uploadImage(imageIdentifier, fullSizePng)
     ],
     [
-      'delete /inApps/v1/messaging/image/image-id',
-      () => storeKit.deleteImage('image-id')
+      `delete /inApps/v1/messaging/image/${imageIdentifier}`,
+      () => storeKit.deleteImage(imageIdentifier)
     ],
     [
-      'put /inApps/v1/messaging/message/message-id',
-      () => storeKit.uploadMessage('message-id', { header: 'Header', body: 'Body' })
+      `put /inApps/v1/messaging/message/${messageIdentifier}`,
+      () => storeKit.uploadMessage(messageIdentifier, { header: 'Header', body: 'Body' })
     ],
     [
-      'delete /inApps/v1/messaging/message/message-id',
-      () => storeKit.deleteMessage('message-id')
+      `delete /inApps/v1/messaging/message/${messageIdentifier}`,
+      () => storeKit.deleteMessage(messageIdentifier)
     ]
   ];
 

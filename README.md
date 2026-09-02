@@ -243,7 +243,8 @@ const config = {
 
 Every request also accepts an `AbortSignal` through its options where options are
 available. Pagination helpers stop at 100 pages or 20,000 items by default; override
-these bounds with `maxPages` and `maxItems`.
+these bounds with `maxPages` and `maxItems`. Timeout values must be positive integers;
+timeout and retry-delay values may not exceed `2_147_483_647` milliseconds.
 
 ## API Methods
 
@@ -349,181 +350,82 @@ Realtime URL and sandbox performance-test endpoints:
 - `initiatePerformanceTest(request)`
 - `getPerformanceTestResults(requestId)`
 
-Performance tests always use Apple's sandbox environment. Image uploads use `image/png`, and repeated query parameters are encoded in Apple's expected format.
+Performance tests always use Apple's sandbox environment. Image uploads use
+`image/png`. `FULL_SIZE` images must be 3840 pixels wide and 160–2160 pixels high;
+`BULLET_POINT` images must be 1024×1024. Transparent PNGs are rejected before upload.
+Repeated query parameters are encoded in Apple's expected format.
 
 ### Consumption Information
-- `sendConsumptionInformation(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information using the deprecated V1 endpoint
-- `sendConsumptionInformationV2(transactionId: string, consumptionRequest: ConsumptionRequest)`: Send consumption information using V2 API
 
-The `ConsumptionRequest` interface includes required and optional fields with their corresponding enum values:
+Use the V2 endpoint for new integrations:
 
-#### Required Fields:
+- `sendConsumptionInformationV2(transactionId, request)`, with `ConsumptionRequest`
+- Required fields: `customerConsented`, `deliveryStatus`, and `sampleContentProvided`
+- Optional fields: `consumptionPercentage` and `refundPreference`
+
+`consumptionPercentage` is an integer in milliunits from `0` through `100000`. It
+must be `0` for an undelivered item. When `refundPreference` is `GRANT_PRORATED` and
+a percentage is provided, it must be greater than `0` and less than `100000`. Only
+these five fields are sent to Apple's V2 endpoint.
+
 ```typescript
-{
-  customerConsented: boolean;             // User consent (must be true)
-  deliveryStatus: DeliveryStatus;         // Delivery success status
-  sampleContentProvided: boolean;         // Free sample provided
-}
-```
+import {
+  ConsumptionRequest,
+  DeliveryStatus,
+  RefundPreference
+} from 'apple-storekit-api';
 
-#### Optional Fields:
-```typescript
-{
-  consumptionPercentage?: number;         // Percentage consumed (0-100000 milliunits)
-  refundPreference?: RefundPreference;    // Your refund preference
-  accountTenure?: AccountTenure;          // Age of customer's account
-  appAccountToken?: string;               // UUID of user account
-  consumptionStatus?: ConsumptionStatus;  // Extent of consumption
-  lifetimeDollarsPurchased?: LifetimeDollars; // Total purchases (USD)
-  lifetimeDollarsRefunded?: LifetimeDollars;  // Total refunds (USD)
-  platform?: Platform;                    // Purchase platform
-  playTime?: PlayTime;                    // App usage time
-  userStatus?: UserStatus;                // Customer account status
-}
-```
-
-#### Enum Values:
-
-**ConsumptionStatus**
-```typescript
-{
-  UNDECLARED = 0,        // Use to avoid providing information
-  NOT_CONSUMED = 1,      // Not consumed at all
-  PARTIALLY_CONSUMED = 2, // Partially consumed
-  FULLY_CONSUMED = 3     // Fully consumed
-}
-```
-
-**Platform**
-```typescript
-{
-  UNDECLARED = 0,  // Use to avoid providing information
-  APPLE = 1,       // Apple platform
-  NON_APPLE = 2    // Non-Apple platform
-}
-```
-
-**DeliveryStatus**
-```typescript
-{
-  DELIVERED = 'DELIVERED',                           // Delivered and working properly
-  UNDELIVERED_QUALITY_ISSUE = 'UNDELIVERED_QUALITY_ISSUE',   // Not delivered due to quality issue
-  UNDELIVERED_WRONG_ITEM = 'UNDELIVERED_WRONG_ITEM',         // Wrong item delivered
-  UNDELIVERED_SERVER_OUTAGE = 'UNDELIVERED_SERVER_OUTAGE',   // Not delivered due to server outage
-  UNDELIVERED_OTHER = 'UNDELIVERED_OTHER'                    // Not delivered for other reasons
-}
-```
-
-**AccountTenure**
-```typescript
-{
-  UNDECLARED = 0,     // Use to avoid providing information
-  DAYS_0_3 = 1,       // 0-3 days
-  DAYS_3_10 = 2,      // 3-10 days
-  DAYS_10_30 = 3,     // 10-30 days
-  DAYS_30_90 = 4,     // 30-90 days
-  DAYS_90_180 = 5,    // 90-180 days
-  DAYS_180_365 = 6,   // 180-365 days
-  DAYS_OVER_365 = 7   // Over 365 days
-}
-```
-
-**PlayTime**
-```typescript
-{
-  UNDECLARED = 0,    // Use to avoid providing information
-  MINUTES_0_5 = 1,   // 0-5 minutes
-  MINUTES_5_60 = 2,  // 5-60 minutes
-  HOURS_1_6 = 3,     // 1-6 hours
-  HOURS_6_24 = 4,    // 6-24 hours
-  DAYS_1_4 = 5,      // 1-4 days
-  DAYS_4_16 = 6,     // 4-16 days
-  DAYS_OVER_16 = 7   // Over 16 days
-}
-```
-
-**LifetimeDollars** (for both purchased and refunded)
-```typescript
-{
-  UNDECLARED = 0,        // Use to avoid providing information
-  USD_0 = 1,            // $0
-  USD_0_01_49_99 = 2,   // $0.01-$49.99
-  USD_50_99_99 = 3,     // $50-$99.99
-  USD_100_499_99 = 4,   // $100-$499.99
-  USD_500_999_99 = 5,   // $500-$999.99
-  USD_1000_1999_99 = 6, // $1000-$1999.99
-  USD_OVER_2000 = 7     // Over $2000
-}
-```
-
-**UserStatus**
-```typescript
-{
-  UNDECLARED = 0,      // Use to avoid providing information
-  ACTIVE = 1,          // Account is active
-  SUSPENDED = 2,       // Account is suspended
-  TERMINATED = 3,      // Account is terminated
-  LIMITED_ACCESS = 4   // Account has limited access
-}
-```
-
-**RefundPreference**
-```typescript
-{
-  DECLINE = 'DECLINE',            // Prefer to decline the refund
-  GRANT_FULL = 'GRANT_FULL',      // Prefer to grant a full refund
-  GRANT_PRORATED = 'GRANT_PRORATED' // Prefer to grant a prorated refund
-}
-```
-
-Example usage:
-```typescript
-const consumptionData = {
-  // Required fields
-  customerConsented: true,  // Make sure you have obtained valid consent
+const consumptionData: ConsumptionRequest = {
+  customerConsented: true,
   deliveryStatus: DeliveryStatus.DELIVERED,
   sampleContentProvided: true,
-
-  // Optional fields
-  consumptionStatus: ConsumptionStatus.FULLY_CONSUMED,
-  platform: Platform.APPLE,
-  appAccountToken: 'YOUR_APP_ACCOUNT_TOKEN',
-  accountTenure: AccountTenure.DAYS_180_365,
-  playTime: PlayTime.HOURS_1_6,
-  lifetimeDollarsRefunded: LifetimeDollars.USD_0,
-  lifetimeDollarsPurchased: LifetimeDollars.USD_50_99_99,
-  userStatus: UserStatus.ACTIVE,
-  refundPreference: RefundPreference.GRANT_FULL
+  consumptionPercentage: 75_000,
+  refundPreference: RefundPreference.GRANT_PRORATED
 };
 
-await storeKit.sendConsumptionInformation('transactionId', consumptionData);
+await storeKit.sendConsumptionInformationV2('transactionId', consumptionData);
 ```
 
-### Important Notes on Consumption Information
+The deprecated V1 endpoint has a different request schema and numeric enums. The
+legacy `sendConsumptionInformation()` method accepts `ConsumptionRequestV1`; all
+fields except `refundPreference` are required by Apple.
 
-1. **User Consent Required**
-   - You MUST obtain valid consent before sharing consumption data
-   - Consent must be freely given, specific, informed, and unambiguous
-   - Users should be able to withdraw consent at any time
-   - Do NOT use App Tracking Transparency prompt for this consent
-   - The API will return HTTP 400 with `InvalidCustomerConsentError` if `customerConsented` is not `true`
+```typescript
+import {
+  AccountTenure,
+  ConsumptionRequestV1,
+  ConsumptionStatus,
+  DeliveryStatusV1,
+  LifetimeDollars,
+  Platform,
+  PlayTime,
+  RefundPreferenceV1,
+  UserStatus
+} from 'apple-storekit-api';
 
-2. **Response to Refund Requests**
-   - Send consumption information when you receive a `CONSUMPTION_REQUEST` notification
-   - Respond within 12 hours of receiving the notification
-   - Only send data if user has provided consent
+const legacyConsumptionData: ConsumptionRequestV1 = {
+  accountTenure: AccountTenure.UNDECLARED,
+  appAccountToken: '',
+  consumptionStatus: ConsumptionStatus.FULLY_CONSUMED,
+  customerConsented: true,
+  deliveryStatus: DeliveryStatusV1.DELIVERED_AND_WORKING_PROPERLY,
+  lifetimeDollarsPurchased: LifetimeDollars.UNDECLARED,
+  lifetimeDollarsRefunded: LifetimeDollars.UNDECLARED,
+  platform: Platform.APPLE,
+  playTime: PlayTime.UNDECLARED,
+  refundPreference: RefundPreferenceV1.NO_PREFERENCE,
+  sampleContentProvided: true,
+  userStatus: UserStatus.ACTIVE
+};
 
-3. **Privacy Considerations**
-   - Never store sensitive user data unencrypted
-   - Update your app's privacy labels to reflect data usage
-   - Implement user data access and deletion requests
-   - Follow Apple's privacy guidelines
+await storeKit.sendConsumptionInformation('transactionId', legacyConsumptionData);
+```
 
-4. **Best Practices**
-   - Use `UNDECLARED` (0) for any field where you don't want to provide information
-   - Always validate the data ranges before sending
-   - Keep track of user consent status
-   - Implement proper error handling for API responses
+Both methods reject requests unless `customerConsented` is exactly `true`. Obtain
+valid consent before sharing the data, send the response within 12 hours of a
+`CONSUMPTION_REQUEST` notification, and update your app privacy disclosures. For V1
+fields you don't provide, use the corresponding `UNDECLARED` value or an empty
+`appAccountToken` as required by Apple.
 
 ### Utility
 - `getConfiguredEnvironment()`: Get `'production'`, `'sandbox'`, or `'auto'`

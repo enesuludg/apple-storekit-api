@@ -31,6 +31,180 @@ const RETRYABLE_NETWORK_CODES = new Set([
   'ETIMEDOUT'
 ]);
 const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const UNSAFE_ENDPOINT_CHARACTERS = /[\\\u0000-\u001f\u007f]/;
+const SENSITIVE_DIAGNOSTIC_KEY =
+  /authorization|cookie|credential|password|private.?key|secret|signature|token/i;
+const BEARER_CREDENTIAL = /\bbearer\s+[^\s,;"']+/gi;
+const JWT_CREDENTIAL = /\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g;
+const MAX_DIAGNOSTIC_DEPTH = 4;
+const MAX_DIAGNOSTIC_ENTRIES = 50;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+function redactDiagnosticString(value: string): string {
+  return value
+    .replace(BEARER_CREDENTIAL, '[REDACTED]')
+    .replace(JWT_CREDENTIAL, '[REDACTED]');
+}
+
+function sanitizeDiagnosticValue(
+  value: unknown,
+  depth = 0,
+  seen = new WeakSet<object>()
+): unknown {
+  if (typeof value === 'string') {
+    return redactDiagnosticString(value);
+  }
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (typeof value === 'bigint' || typeof value === 'symbol') {
+    return String(value);
+  }
+  if (typeof value === 'function') {
+    return `[Function${value.name ? `: ${value.name}` : ''}]`;
+  }
+  if (depth >= MAX_DIAGNOSTIC_DEPTH) {
+    return '[Truncated]';
+  }
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+  seen.add(value);
+
+  if (value instanceof Error) {
+    const sanitizedError: Record<string, unknown> = {
+      name: redactDiagnosticString(value.name),
+      message: redactDiagnosticString(value.message)
+    };
+    const errorCode = getDiagnosticProperty(value, 'code');
+    if (typeof errorCode === 'string' || typeof errorCode === 'number') {
+      sanitizedError.code = typeof errorCode === 'string'
+        ? redactDiagnosticString(errorCode)
+        : errorCode;
+    }
+    return sanitizedError;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, MAX_DIAGNOSTIC_ENTRIES)
+      .map(item => sanitizeDiagnosticValue(item, depth + 1, seen));
+  }
+
+  const sanitizedObject: Record<string, unknown> = {};
+  let entries: Array<[string, unknown]>;
+  try {
+    entries = Object.entries(value as Record<string, unknown>);
+  } catch {
+    return '[Unserializable object]';
+  }
+
+  for (const [key, item] of entries.slice(0, MAX_DIAGNOSTIC_ENTRIES)) {
+    sanitizedObject[key] = SENSITIVE_DIAGNOSTIC_KEY.test(key)
+      ? '[REDACTED]'
+      : sanitizeDiagnosticValue(item, depth + 1, seen);
+  }
+  return sanitizedObject;
+}
+
+function formatDiagnosticValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return redactDiagnosticString(value);
+  }
+
+  try {
+    const serialized = JSON.stringify(sanitizeDiagnosticValue(value));
+    return serialized === undefined ? String(value) : serialized;
+  } catch {
+    return '[Unserializable value]';
+  }
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  try {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getDiagnosticProperty(value: object, property: string): unknown {
+  try {
+    return Reflect.get(value, property);
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeError(error: unknown): Readonly<Record<string, unknown>> {
+  const sanitized: Record<string, unknown> = {
+    name: error instanceof Error ? redactDiagnosticString(error.name) : 'Error',
+    message: error instanceof Error
+      ? redactDiagnosticString(error.message)
+      : formatDiagnosticValue(error)
+  };
+
+  if (!axios.isAxiosError(error)) {
+    return Object.freeze(sanitized);
+  }
+
+  sanitized.isAxiosError = true;
+  if (typeof error.code === 'string') {
+    sanitized.code = redactDiagnosticString(error.code);
+  }
+
+  const status = error.response?.status;
+  const responseData = error.response?.data;
+  const errorCode = responseData && typeof responseData === 'object'
+    ? toFiniteNumber(getDiagnosticProperty(responseData, 'errorCode'))
+    : undefined;
+  if (status !== undefined) {
+    sanitized.statusCode = status;
+  }
+  if (errorCode !== undefined) {
+    sanitized.errorCode = errorCode;
+  }
+  if (responseData !== undefined) {
+    sanitized.response = Object.freeze({
+      status,
+      data: sanitizeDiagnosticValue(responseData)
+    });
+  }
+
+  return Object.freeze(sanitized);
+}
+
+function sanitizeTransportError(error: unknown): Error {
+  const message = error instanceof Error
+    ? redactDiagnosticString(error.message)
+    : formatDiagnosticValue(error);
+  const options = { cause: sanitizeError(error) };
+  const sanitizedError = error instanceof TypeError
+    ? new TypeError(message, options)
+    : error instanceof RangeError
+      ? new RangeError(message, options)
+      : new Error(message, options);
+
+  if (error instanceof Error) {
+    sanitizedError.name = redactDiagnosticString(error.name);
+    const code = getDiagnosticProperty(error, 'code');
+    if (typeof code === 'string' || typeof code === 'number') {
+      Object.defineProperty(sanitizedError, 'code', {
+        configurable: true,
+        enumerable: true,
+        value: typeof code === 'string' ? redactDiagnosticString(code) : code
+      });
+    }
+  }
+
+  return sanitizedError;
+}
 
 export interface StoreKitAttemptError {
   environment: StoreEnvironment;
@@ -61,13 +235,19 @@ export class AppleStoreKitApiError extends Error {
     super(message);
     this.name = 'AppleStoreKitApiError';
     this.environment = environment;
-    this.originalError = originalError;
-    this.cause = originalError;
+    const sanitizedOriginalError = sanitizeError(originalError);
+    this.originalError = sanitizedOriginalError;
+    this.cause = sanitizedOriginalError;
     this.statusCode = statusCode;
     this.errorCode = errorCode;
     this.retryAfterMs = retryAfterMs;
     this.retryable = retryable;
-    this.attempts = attempts;
+    this.attempts = attempts
+      ? Object.freeze(attempts.map(attempt => Object.freeze({
+        environment: attempt.environment,
+        error: sanitizeError(attempt.error)
+      })))
+      : undefined;
   }
 }
 
@@ -219,8 +399,7 @@ export class BaseService implements StoreKitClient {
     try {
       const value = jwt.sign(payload, this.privateKeyContent, {
         algorithm: 'ES256',
-        header,
-        noTimestamp: true
+        header
       });
       this.cachedToken = { value, expiresAt: payload.exp };
       return value;
@@ -491,18 +670,20 @@ export class BaseService implements StoreKitClient {
     let attempt = 0;
 
     while (true) {
+      const requestConfig = {
+        method,
+        url: this.buildRequestUrl(environment, endpoint, options.query),
+        data,
+        signal: options.signal,
+        timeout: this.getRequestTimeout(options.timeoutMs),
+        headers: {
+          'Authorization': `Bearer ${this.generateToken()}`,
+          'Content-Type': options.contentType || 'application/json'
+        }
+      };
+
       try {
-        const response = await this.httpClient.request<T>({
-          method,
-          url: this.buildRequestUrl(environment, endpoint, options.query),
-          data,
-          signal: options.signal,
-          timeout: this.getRequestTimeout(options.timeoutMs),
-          headers: {
-            'Authorization': `Bearer ${this.generateToken()}`,
-            'Content-Type': options.contentType || 'application/json'
-          }
-        });
+        const response = await this.httpClient.request<T>(requestConfig);
 
         return {
           data: response.data,
@@ -510,13 +691,16 @@ export class BaseService implements StoreKitClient {
           statusCode: response.status
         };
       } catch (error) {
+        const safeError = axios.isAxiosError(error)
+          ? error
+          : sanitizeTransportError(error);
         if (attempt >= maxRetries) {
-          throw error;
+          throw safeError;
         }
 
         const retryDelay = this.getRetryDelay(error, attempt);
         if (retryDelay === null) {
-          throw error;
+          throw safeError;
         }
 
         attempt += 1;
@@ -531,7 +715,7 @@ export class BaseService implements StoreKitClient {
     }
 
     const status = error.response?.status;
-    const errorCode = Number(error.response?.data?.errorCode);
+    const errorCode = toFiniteNumber(error.response?.data?.errorCode);
     const isRetryableNetworkError = !error.response &&
       RETRYABLE_NETWORK_CODES.has(error.code || '');
     const isRetryable =
@@ -561,23 +745,40 @@ export class BaseService implements StoreKitClient {
     endpoint: string,
     query: StoreKitRequestOptions['query']
   ): string {
-    const url = `${this.getBaseUrl(environment)}${endpoint}`;
-    if (!query) {
-      return url;
+    if (
+      typeof endpoint !== 'string' ||
+      !endpoint.startsWith('/') ||
+      endpoint.startsWith('//') ||
+      UNSAFE_ENDPOINT_CHARACTERS.test(endpoint)
+    ) {
+      throw new TypeError(
+        'endpoint must be a safe absolute path beginning with exactly one forward slash.'
+      );
     }
 
-    const searchParams = new URLSearchParams();
+    const baseUrl = new URL(this.getBaseUrl(environment));
+    const url = new URL(endpoint, baseUrl);
+    if (url.origin !== baseUrl.origin || url.username || url.password) {
+      throw new TypeError('endpoint must resolve to the selected Apple StoreKit API origin.');
+    }
+    if (url.hash) {
+      throw new TypeError('endpoint must not contain a URL fragment.');
+    }
+
+    if (!query) {
+      return url.toString();
+    }
+
     Object.entries(query).forEach(([key, value]) => {
       if (value === undefined || value === null) {
         return;
       }
 
       const values = Array.isArray(value) ? value : [value];
-      values.forEach(item => searchParams.append(key, String(item)));
+      values.forEach(item => url.searchParams.append(key, String(item)));
     });
 
-    const queryString = searchParams.toString();
-    return queryString ? `${url}?${queryString}` : url;
+    return url.toString();
   }
 
   private getRetryAfterMs(error: unknown): number | undefined {
@@ -590,8 +791,8 @@ export class BaseService implements StoreKitClient {
       return undefined;
     }
 
-    const numericValue = Number(retryAfter);
-    if (Number.isFinite(numericValue)) {
+    const numericValue = toFiniteNumber(retryAfter);
+    if (numericValue !== undefined) {
       // Apple returns a UNIX timestamp in milliseconds. Also support the
       // standard Retry-After delay-in-seconds representation.
       return numericValue > 1_000_000_000_000
@@ -606,7 +807,7 @@ export class BaseService implements StoreKitClient {
   private isTransactionNotFound(error: unknown): boolean {
     return axios.isAxiosError(error) &&
       error.response?.status === 404 &&
-      Number(error.response?.data?.errorCode) === 4040010;
+      toFiniteNumber(error.response?.data?.errorCode) === 4040010;
   }
 
   private normalizeError(
@@ -620,20 +821,24 @@ export class BaseService implements StoreKitClient {
 
     const responseData = error.response?.data;
     const statusCode = error.response?.status;
-    const errorCode = Number(responseData?.errorCode);
-    const normalizedErrorCode = Number.isFinite(errorCode) ? errorCode : undefined;
+    const normalizedErrorCode = responseData && typeof responseData === 'object'
+      ? toFiniteNumber(getDiagnosticProperty(responseData, 'errorCode'))
+      : undefined;
     const retryAfterMs = this.getRetryAfterMs(error);
-    let detail = error.message;
+    let detail = redactDiagnosticString(error.message);
 
     if (typeof responseData === 'string') {
-      detail = responseData;
+      detail = redactDiagnosticString(responseData);
     } else if (responseData && typeof responseData === 'object') {
-      detail = responseData.errorMessage ||
-        responseData.message ||
-        responseData.error ||
-        (normalizedErrorCode !== undefined
+      const errorMessage = getDiagnosticProperty(responseData, 'errorMessage');
+      const message = getDiagnosticProperty(responseData, 'message');
+      const responseError = getDiagnosticProperty(responseData, 'error');
+      const preferredDetail = errorMessage ?? message ?? responseError;
+      detail = preferredDetail !== undefined
+        ? formatDiagnosticValue(preferredDetail)
+        : normalizedErrorCode !== undefined
           ? `Error Code: ${normalizedErrorCode}`
-          : JSON.stringify(responseData));
+          : formatDiagnosticValue(responseData);
     }
 
     const statusSuffix = statusCode ? ` (Status: ${statusCode})` : '';
@@ -666,7 +871,7 @@ export class BaseService implements StoreKitClient {
       return false;
     }
     const status = error.response?.status;
-    const errorCode = Number(error.response?.data?.errorCode);
+    const errorCode = toFiniteNumber(error.response?.data?.errorCode);
     return (!error.response && RETRYABLE_NETWORK_CODES.has(error.code || '')) ||
       (status !== undefined && RETRYABLE_HTTP_STATUS_CODES.has(status)) ||
       errorCode === 5000001;
@@ -687,18 +892,28 @@ export class BaseService implements StoreKitClient {
       (!Number.isSafeInteger(config.appAppleId) || config.appAppleId <= 0)) {
       throw new RangeError('appAppleId must be a positive safe integer.');
     }
+    if (config.maxRetries !== undefined &&
+      (!Number.isSafeInteger(config.maxRetries) || config.maxRetries < 0)) {
+      throw new RangeError('maxRetries must be a non-negative safe integer.');
+    }
     for (const [name, value] of [
-      ['maxRetries', config.maxRetries],
       ['retryBaseDelayMs', config.retryBaseDelayMs],
       ['maxRetryDelayMs', config.maxRetryDelayMs]
     ] as const) {
-      if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
-        throw new RangeError(`${name} must be a non-negative safe integer.`);
+      if (value !== undefined &&
+        (!Number.isSafeInteger(value) || value < 0 || value > MAX_TIMER_DELAY_MS)) {
+        throw new RangeError(
+          `${name} must be a non-negative safe integer no greater than ${MAX_TIMER_DELAY_MS}.`
+        );
       }
     }
     if (config.timeoutMs !== undefined &&
-      (!Number.isFinite(config.timeoutMs) || config.timeoutMs <= 0)) {
-      throw new RangeError('timeoutMs must be a positive finite number.');
+      (!Number.isSafeInteger(config.timeoutMs) ||
+        config.timeoutMs <= 0 ||
+        config.timeoutMs > MAX_TIMER_DELAY_MS)) {
+      throw new RangeError(
+        `timeoutMs must be a positive safe integer no greater than ${MAX_TIMER_DELAY_MS}.`
+      );
     }
     if (config.httpClient && typeof config.httpClient.request !== 'function') {
       throw new TypeError('httpClient must provide a request function.');
@@ -714,10 +929,12 @@ export class BaseService implements StoreKitClient {
     if (timeout === undefined) {
       return 10_000;
     }
-    if (!Number.isFinite(timeout) || timeout <= 0) {
-      throw new RangeError('timeoutMs must be a positive finite number.');
+    if (!Number.isSafeInteger(timeout) || timeout <= 0 || timeout > MAX_TIMER_DELAY_MS) {
+      throw new RangeError(
+        `timeoutMs must be a positive safe integer no greater than ${MAX_TIMER_DELAY_MS}.`
+      );
     }
-    return Math.floor(timeout);
+    return timeout;
   }
 
   private wait(delayMs: number, signal?: AbortSignal): Promise<void> {

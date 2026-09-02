@@ -9,6 +9,17 @@ export function requireNonEmptyString(value: unknown, name: string): asserts val
   }
 }
 
+export function requireStringMaxLength(
+  value: unknown,
+  name: string,
+  maxLength: number
+): asserts value is string {
+  requireNonEmptyString(value, name);
+  if (Array.from(value).length > maxLength) {
+    throw new RangeError(`${name} must be at most ${maxLength} characters.`);
+  }
+}
+
 export function requireUuid(value: string, name: string): void {
   requireNonEmptyString(value, name);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
@@ -28,6 +39,20 @@ export function validateDateRange(
   }
   if (startDate !== undefined && endDate !== undefined && startDate > endDate) {
     throw new RangeError(`${name} startDate must not be later than endDate.`);
+  }
+}
+
+export function validateRequiredDateRange(
+  startDate: number | undefined,
+  endDate: number | undefined,
+  name: string
+): void {
+  if (startDate === undefined || endDate === undefined) {
+    throw new TypeError(`${name} requires both startDate and endDate.`);
+  }
+  validateDateRange(startDate, endDate, name);
+  if (startDate >= endDate) {
+    throw new RangeError(`${name} startDate must be earlier than endDate.`);
   }
 }
 

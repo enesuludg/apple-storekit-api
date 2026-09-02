@@ -9,7 +9,12 @@ import {
   StoreKitRequestControlOptions
 } from '../interfaces';
 import { createStoreKitClient, StoreKitClient } from './base.service';
-import { encodePathSegment, requireNonEmptyString, requireUuid } from './validation';
+import {
+  encodePathSegment,
+  requireNonEmptyString,
+  requireStringMaxLength,
+  requireUuid
+} from './validation';
 
 export class RenewalService {
   private readonly client: StoreKitClient;
@@ -23,7 +28,7 @@ export class RenewalService {
     request: ExtendRenewalDateRequest,
     control: StoreKitRequestControlOptions = {}
   ): Promise<ExtendRenewalDateResponse> {
-    this.validateExtendRequest(request);
+    this.validateExtendRequest(request, false);
     const environment = await this.client.resolveTransactionEnvironment(
       originalTransactionId,
       control
@@ -44,13 +49,21 @@ export class RenewalService {
     request: MassExtendRenewalDateRequest,
     options: StoreKitEnvironmentOptions = {}
   ): Promise<MassExtendRenewalDateResponse> {
-    this.validateExtendRequest(request);
+    this.validateExtendRequest(request, true);
     requireNonEmptyString(request.productId, 'productId');
-    request.storefrontCountryCodes?.forEach(code => {
-      if (!/^[A-Z]{2}$/.test(code)) {
-        throw new TypeError('storefrontCountryCodes must contain ISO 3166-1 alpha-2 codes.');
+    if (request.storefrontCountryCodes !== undefined) {
+      if (!Array.isArray(request.storefrontCountryCodes) ||
+        request.storefrontCountryCodes.length === 0) {
+        throw new TypeError('storefrontCountryCodes must be a non-empty array when provided.');
       }
-    });
+      request.storefrontCountryCodes.forEach(code => {
+        if (typeof code !== 'string' || !/^[A-Z]{3}$/.test(code)) {
+          throw new TypeError(
+            'storefrontCountryCodes must contain uppercase ISO 3166-1 alpha-3 codes.'
+          );
+        }
+      });
+    }
     const environment = this.client.requireEnvironment(
       options.environment,
       'mass subscription renewal extension'
@@ -88,7 +101,10 @@ export class RenewalService {
     );
   }
 
-  private validateExtendRequest(request: ExtendRenewalDateRequest): void {
+  private validateExtendRequest(
+    request: ExtendRenewalDateRequest,
+    requestIdentifierMustBeUuid: boolean
+  ): void {
     if (!Number.isSafeInteger(request.extendByDays) ||
       request.extendByDays < 1 ||
       request.extendByDays > 90) {
@@ -97,6 +113,10 @@ export class RenewalService {
     if (![0, 1, 2, 3].includes(request.extendReasonCode)) {
       throw new RangeError('extendReasonCode must be one of 0, 1, 2, or 3.');
     }
-    requireUuid(request.requestIdentifier, 'requestIdentifier');
+    if (requestIdentifierMustBeUuid) {
+      requireUuid(request.requestIdentifier, 'requestIdentifier');
+    } else {
+      requireStringMaxLength(request.requestIdentifier, 'requestIdentifier', 128);
+    }
   }
 }
