@@ -1,4 +1,5 @@
-import { TransactionInfo } from "./transaction";
+import type { JWSRenewalInfoDecodedPayload } from '@apple/app-store-server-library';
+import { TransactionInfo } from './transaction';
 
 export enum SubscriptionStatusType {
   /** The auto-renewable subscription is active */
@@ -13,7 +14,7 @@ export enum SubscriptionStatusType {
   REVOKED = 5
 }
 
-export type SubscriptionStatusTypeString = keyof typeof SubscriptionStatusType;
+export type SubscriptionStatusTypeString = keyof typeof SubscriptionStatusType | 'UNKNOWN';
 
 export interface SubscriptionStatus {
   /** The original transaction identifier */
@@ -30,18 +31,8 @@ export interface SubscriptionStatus {
   renewalInfo: RenewalInfo;
 }
 
-export interface RenewalInfo {
-  originalTransactionId: string;
-  autoRenewProductId: string;
-  productId: string;
-  autoRenewStatus: number;
-  renewalPrice: number;
-  currency: string;
-  signedDate: number;
-  environment: string;
-  recentSubscriptionStartDate: number;
-  renewalDate: number;
-}
+/** Renewal payload whose Apple JWS signature and claims were verified. */
+export type RenewalInfo = JWSRenewalInfoDecodedPayload;
 
 export interface AppleSubscriptionResponse {
   /** The environment where the transaction occurred */
@@ -64,4 +55,4 @@ export interface AppleSubscriptionResponse {
       signedRenewalInfo: string;
     }>;
   }>;
-} 
+}

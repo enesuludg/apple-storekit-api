@@ -16,13 +16,25 @@ export enum ConsumptionStatus {
   FULLY_CONSUMED = 3
 }
 
-export enum DeliveryStatus {
-  DELIVERED='DELIVERED',
-  UNDELIVERED_QUALITY_ISSUE='UNDELIVERED_QUALITY_ISSUE',
-  UNDELIVERED_WRONG_ITEM='UNDELIVERED_WRONG_ITEM',
-  UNDELIVERED_SERVER_OUTAGE='UNDELIVERED_SERVER_OUTAGE',
-  UNDELIVERED_OTHER='UNDELIVERED_OTHER'
+/**
+ * Delivery status values for the deprecated V1 consumption endpoint.
+ * @deprecated Use DeliveryStatus with sendConsumptionInformationV2().
+ */
+export enum DeliveryStatusV1 {
+  DELIVERED_AND_WORKING_PROPERLY = 0,
+  DID_NOT_DELIVER_DUE_TO_QUALITY_ISSUE = 1,
+  DELIVERED_WRONG_ITEM = 2,
+  DID_NOT_DELIVER_DUE_TO_SERVER_OUTAGE = 3,
+  DID_NOT_DELIVER_DUE_TO_IN_GAME_CURRENCY_CHANGE = 4,
+  DID_NOT_DELIVER_FOR_OTHER_REASON = 5
+}
 
+export enum DeliveryStatus {
+  DELIVERED = 'DELIVERED',
+  UNDELIVERED_QUALITY_ISSUE = 'UNDELIVERED_QUALITY_ISSUE',
+  UNDELIVERED_WRONG_ITEM = 'UNDELIVERED_WRONG_ITEM',
+  UNDELIVERED_SERVER_OUTAGE = 'UNDELIVERED_SERVER_OUTAGE',
+  UNDELIVERED_OTHER = 'UNDELIVERED_OTHER'
 }
 
 export enum Platform {
@@ -67,46 +79,54 @@ export enum RefundPreference {
   GRANT_PRORATED = 'GRANT_PRORATED'
 }
 
+/**
+ * Refund preference values for the deprecated V1 consumption endpoint.
+ * @deprecated Use RefundPreference with sendConsumptionInformationV2().
+ */
+export enum RefundPreferenceV1 {
+  UNDECLARED = 0,
+  PREFER_GRANT = 1,
+  PREFER_DECLINE = 2,
+  NO_PREFERENCE = 3
+}
+
+/**
+ * The request body for Apple's deprecated V1 consumption endpoint.
+ * Apple requires every field except refundPreference. Use the UNDECLARED enum
+ * values, or an empty appAccountToken, when information isn't available.
+ * @deprecated Use ConsumptionRequest with sendConsumptionInformationV2().
+ */
+export interface ConsumptionRequestV1 {
+  accountTenure: AccountTenure;
+  appAccountToken: string;
+  consumptionStatus: ConsumptionStatus;
+  customerConsented: boolean;
+  deliveryStatus: DeliveryStatusV1;
+  lifetimeDollarsPurchased: LifetimeDollars;
+  lifetimeDollarsRefunded: LifetimeDollars;
+  platform: Platform;
+  playTime: PlayTime;
+  refundPreference?: RefundPreferenceV1;
+  sampleContentProvided: boolean;
+  userStatus: UserStatus;
+}
+
+/** The request body for Apple's V2 consumption endpoint. */
 export interface ConsumptionRequest {
-  /** Required: A Boolean value of true or false that indicates whether the customer consented to provide consumption data */
+  /** Required: Apple accepts the request only when this value is true. */
   customerConsented: boolean;
 
-  /** Optional: An integer that indicates the percentage of the In-App Purchase the customer consumed, in milliunits. Minimum: 0, Maximum: 100000 */
+  /** Optional: The percentage consumed in milliunits, as an integer from 0 through 100000. */
   consumptionPercentage?: number;
 
-  /** Required: A value that indicates whether the app successfully delivered an In-App Purchase that works properly */
-  deliveryStatus: DeliveryStatus;
+  /** Required: Whether the app successfully delivered a working In-App Purchase. */
+  deliveryStatus: DeliveryStatus | string;
 
-  /** Optional: A value that indicates your preference, based on your operational logic, as to whether the App Store should grant the refund */
-  refundPreference?: RefundPreference;
+  /** Optional: The preferred outcome for the refund request. */
+  refundPreference?: RefundPreference | string;
 
-  /** Required: A Boolean value of true or false that indicates whether you provided, prior to its purchase, a free sample or trial of the content, or information about its functionality */
+  /** Required: Whether a free sample, trial, or functionality information was provided. */
   sampleContentProvided: boolean;
-
-  // Legacy/Additional optional fields (may still be supported)
-  /** Optional: The age of the customer's account */
-  accountTenure?: AccountTenure;
-
-  /** Optional: The UUID of the in-app user account that completed the in-app purchase transaction */
-  appAccountToken?: string;
-
-  /** Optional: The extent to which the customer consumed the in-app purchase */
-  consumptionStatus?: ConsumptionStatus;
-
-  /** Optional: Total amount of purchases made across all platforms (in USD) */
-  lifetimeDollarsPurchased?: LifetimeDollars;
-
-  /** Optional: Total amount of refunds received across all platforms (in USD) */
-  lifetimeDollarsRefunded?: LifetimeDollars;
-
-  /** Optional: The platform on which the customer consumed the in-app purchase */
-  platform?: Platform;
-
-  /** Optional: Amount of time the customer used the app */
-  playTime?: PlayTime;
-
-  /** Optional: Status of the customer's account */
-  userStatus?: UserStatus;
 }
 
 export interface ConsumptionResponse {
@@ -116,4 +136,4 @@ export interface ConsumptionResponse {
   transactionId: string;
   /** HTTP status code (202 when accepted) */
   statusCode: number;
-} 
+}
