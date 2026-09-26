@@ -1,12 +1,24 @@
 'use strict';
 
 const { execFileSync } = require('node:child_process');
-const { readdirSync, readFileSync, realpathSync } = require('node:fs');
+const {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} = require('node:fs');
+const { tmpdir } = require('node:os');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const sourceRoot = path.join(root, 'src');
 const expectedFiles = new Set(['CHANGES.md', 'LICENSE', 'README.md', 'package.json']);
+const publishEntries = ['dist', 'README.md', 'CHANGES.md', 'LICENSE'];
 
 function addCompiledFiles(directory, relativeDirectory = '') {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -32,11 +44,54 @@ function addCompiledFiles(directory, relativeDirectory = '') {
 
 addCompiledFiles(sourceRoot);
 
-const packOutput = execFileSync(
-  'npm',
-  ['pack', '--dry-run', '--ignore-scripts', '--json'],
-  { cwd: root, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 }
-);
+const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
+if (!Array.isArray(packageJson.files) ||
+    packageJson.files.length !== publishEntries.length ||
+    new Set(packageJson.files).size !== publishEntries.length ||
+    publishEntries.some((entry) => !packageJson.files.includes(entry))) {
+  throw new Error(`Unexpected package files allowlist: ${JSON.stringify(packageJson.files)}.`);
+}
+if (packageJson.bin !== undefined || packageJson.man !== undefined ||
+    packageJson.bundleDependencies !== undefined ||
+    packageJson.bundledDependencies !== undefined ||
+    packageJson.directories?.bin !== undefined ||
+    packageJson.directories?.man !== undefined ||
+    packageJson.workspaces !== undefined) {
+  throw new Error('Unexpected package metadata that may add files to the tarball.');
+}
+
+// npm 10 runs `prepare` even for `npm pack --dry-run --ignore-scripts`. Packing
+// a script-free copy preserves the actual packlist without rebuilding (and
+// thereby hiding) stale dist files in the checkout being verified.
+const stagingRoot = mkdtempSync(path.join(tmpdir(), 'storekit-packlist-'));
+let packOutput;
+try {
+  for (const entry of publishEntries) {
+    const from = path.join(root, entry);
+    const to = path.join(stagingRoot, entry);
+    if (entry === 'dist') {
+      cpSync(from, to, { recursive: true });
+    } else {
+      copyFileSync(from, to);
+    }
+  }
+  for (const ignoreFile of ['.npmignore', '.gitignore']) {
+    const from = path.join(root, ignoreFile);
+    if (existsSync(from)) {
+      copyFileSync(from, path.join(stagingRoot, ignoreFile));
+    }
+  }
+  const stagedPackageJson = { ...packageJson };
+  delete stagedPackageJson.scripts;
+  writeFileSync(path.join(stagingRoot, 'package.json'), JSON.stringify(stagedPackageJson));
+  packOutput = execFileSync(
+    'npm',
+    ['pack', '--dry-run', '--ignore-scripts', '--json'],
+    { cwd: stagingRoot, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 }
+  );
+} finally {
+  rmSync(stagingRoot, { recursive: true, force: true });
+}
 const packEntries = JSON.parse(packOutput);
 if (packEntries.length !== 1 || !Array.isArray(packEntries[0].files)) {
   throw new Error('npm pack returned an unexpected manifest.');

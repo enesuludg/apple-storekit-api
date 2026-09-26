@@ -26,14 +26,15 @@ function runScript(packageRoot, script) {
 test('package gate rejects stale files and credentials and clean build removes stale output', () => {
   const packageRoot = mkdtempSync(path.join(tmpdir(), 'storekit-manifest-'));
   try {
-    for (const fileName of ['CHANGES.md', 'LICENSE', 'README.md', 'package.json']) {
+    for (const fileName of ['.gitignore', '.npmignore', 'CHANGES.md', 'LICENSE', 'README.md', 'package.json']) {
       copyFileSync(path.join(root, fileName), path.join(packageRoot, fileName));
     }
     for (const directory of ['src', 'dist', 'scripts']) {
       cpSync(path.join(root, directory), path.join(packageRoot, directory), { recursive: true });
     }
 
-    assert.equal(runScript(packageRoot, 'verify-package.js').status, 0);
+    const cleanResult = runScript(packageRoot, 'verify-package.js');
+    assert.equal(cleanResult.status, 0, cleanResult.stderr);
 
     writeFileSync(path.join(packageRoot, 'dist', 'example.js'), 'stale example');
     const staleResult = runScript(packageRoot, 'verify-package.js');
