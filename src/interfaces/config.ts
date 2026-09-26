@@ -1,5 +1,6 @@
 import type {
   AppTransaction,
+  DecodedRealtimeRequestBody,
   JWSRenewalInfoDecodedPayload,
   JWSTransactionDecodedPayload,
   ResponseBodyV2DecodedPayload
@@ -66,6 +67,8 @@ export interface StoreKitSignedDataVerifier {
   verifyAndDecodeRenewalInfo(signedData: string): Promise<JWSRenewalInfoDecodedPayload>;
   verifyAndDecodeNotification(signedData: string): Promise<ResponseBodyV2DecodedPayload>;
   verifyAndDecodeAppTransaction(signedData: string): Promise<AppTransaction>;
+  /** Optional for compatibility with custom verifiers created before retention messaging support. */
+  verifyAndDecodeRealtimeRequest?(signedPayload: string): Promise<DecodedRealtimeRequestBody>;
 }
 
 /** Minimal HTTP adapter contract used for dependency injection and isolated tests. */

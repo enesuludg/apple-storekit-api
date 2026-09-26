@@ -9,7 +9,7 @@ import {
   SubscriptionStatusTypeString
 } from '../interfaces';
 import { createStoreKitClient, StoreKitClient } from './base.service';
-import { encodePathSegment } from './validation';
+import { encodePathSegment, pickRequestControlOptions } from './validation';
 
 export class SubscriptionService {
   private readonly client: StoreKitClient;
@@ -50,9 +50,17 @@ export class SubscriptionService {
       'get',
       `/inApps/v1/subscriptions/${encodedTransactionId}`,
       undefined,
-      environment
-        ? { environment, query: { status: statuses }, ...control }
-        : { allowEnvironmentFallback: true, query: { status: statuses }, ...control }
+      environment !== undefined
+        ? {
+          environment,
+          query: { status: statuses },
+          ...pickRequestControlOptions(control)
+        }
+        : {
+          allowEnvironmentFallback: true,
+          query: { status: statuses },
+          ...pickRequestControlOptions(control)
+        }
     );
     if (!Array.isArray(result.data.data) || result.data.data.some(group =>
       !group ||

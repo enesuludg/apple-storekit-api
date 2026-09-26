@@ -33,12 +33,28 @@ export class NotificationService {
     options: StoreKitEnvironmentOptions = {}
   ): Promise<NotificationHistoryResponse> {
     this.validateHistoryRequest(request);
+    const validatedRequest = { ...request };
     const environment = await this.resolveEnvironment(
       options.environment,
-      request.transactionId,
+      validatedRequest.transactionId,
       options
     );
+    this.validateHistoryWindow(validatedRequest, environment);
 
+    return this.requestNotificationHistoryPage(
+      validatedRequest,
+      paginationToken,
+      environment,
+      options
+    );
+  }
+
+  private async requestNotificationHistoryPage(
+    request: NotificationHistoryRequest,
+    paginationToken: string | undefined,
+    environment: StoreEnvironment,
+    options: StoreKitEnvironmentOptions
+  ): Promise<NotificationHistoryResponse> {
     const response = await this.client.makeRequest<NotificationHistoryResponse>(
       'post',
       '/inApps/v1/notifications/history',
@@ -85,12 +101,14 @@ export class NotificationService {
     options: StoreKitPaginationOptions = {}
   ): AsyncGenerator<NotificationHistoryResponse, void, void> {
     this.validateHistoryRequest(request);
+    const validatedRequest = { ...request };
     const limits = resolvePaginationLimits(options);
     const environment = await this.resolveEnvironment(
       options.environment,
-      request.transactionId,
+      validatedRequest.transactionId,
       options
     );
+    this.validateHistoryWindow(validatedRequest, environment);
     const resolvedOptions = {
       environment,
       signal: options.signal,
@@ -102,7 +120,12 @@ export class NotificationService {
 
     do {
       assertCanFetchPage(pagesFetched, limits, 'Notification history');
-      const page = await this.getNotificationHistory(request, paginationToken, resolvedOptions);
+      const page = await this.requestNotificationHistoryPage(
+        validatedRequest,
+        paginationToken,
+        environment,
+        resolvedOptions
+      );
       pagesFetched += 1;
       const pageItems = page.notificationHistory || [];
       assertCanAddItems(itemsRead, pageItems.length, limits, 'Notification history');
@@ -158,8 +181,8 @@ export class NotificationService {
     transactionId?: string,
     control: StoreKitEnvironmentOptions = {}
   ): Promise<StoreEnvironment> {
-    if (explicitEnvironment) {
-      return explicitEnvironment;
+    if (explicitEnvironment !== undefined) {
+      return this.client.requireEnvironment(explicitEnvironment, 'notification endpoints');
     }
     if (transactionId) {
       return this.client.resolveTransactionEnvironment(transactionId, control);
@@ -187,6 +210,20 @@ export class NotificationService {
       if (request.notificationType !== undefined) {
         throw new TypeError('transactionId and notificationType are mutually exclusive.');
       }
+    }
+  }
+
+  private validateHistoryWindow(
+    request: NotificationHistoryRequest,
+    environment: StoreEnvironment
+  ): void {
+    const retentionDays = environment === 'sandbox' ? 30 : 180;
+    const now = Date.now();
+    const earliestStartDate = now - retentionDays * 24 * 60 * 60 * 1_000;
+    if (request.startDate < earliestStartDate || request.startDate > now) {
+      throw new RangeError(
+        `Notification history startDate must be within the past ${retentionDays} days in ${environment}.`
+      );
     }
   }
 }

@@ -12,13 +12,13 @@ const REQUEST_IDENTIFIER = '00000000-0000-4000-8000-000000000003';
 const FULL_SIZE_PNG = createPng(3840, 160);
 const BULLET_POINT_PNG = createPng(1024, 1024);
 
-function createStoreKit(calls) {
+function createStoreKit(calls, environment = 'production') {
   return new AppleStoreKit({
     issuerId: '00000000-0000-4000-8000-000000000000',
     keyId: 'TESTKEY123',
     privateKey: privateKeyPem,
     bundleId: 'com.example.app',
-    environment: 'production',
+    environment,
     maxRetries: 0,
     httpClient: {
       request: async request => {
@@ -98,9 +98,10 @@ test('renewal validation follows the individual and mass request contracts', asy
 test('notification history validates required and mutually exclusive fields before I/O', async () => {
   const calls = [];
   const storeKit = createStoreKit(calls);
+  const now = Date.now();
+  const validDateRange = { startDate: now - 60_000, endDate: now };
   const validRequest = {
-    startDate: 1,
-    endDate: 2,
+    ...validDateRange,
     notificationType: 'DID_RENEW',
     notificationSubtype: 'BILLING_RECOVERY',
     onlyFailures: false
@@ -110,34 +111,30 @@ test('notification history validates required and mutually exclusive fields befo
   assert.deepEqual(calls[0].data, validRequest);
 
   const invalidCalls = [
-    () => storeKit.getNotificationHistory({ endDate: 2 }),
-    () => storeKit.getNotificationHistory({ startDate: 1 }),
-    () => storeKit.getNotificationHistory({ startDate: 2, endDate: 2 }),
-    () => storeKit.getNotificationHistory({ startDate: 3, endDate: 2 }),
+    () => storeKit.getNotificationHistory({ endDate: now }),
+    () => storeKit.getNotificationHistory({ startDate: now - 60_000 }),
+    () => storeKit.getNotificationHistory({ startDate: now, endDate: now }),
+    () => storeKit.getNotificationHistory({ startDate: now, endDate: now - 60_000 }),
     () => storeKit.getNotificationHistory({
-      startDate: 1,
-      endDate: 2,
+      ...validDateRange,
       transactionId: 'transaction',
       notificationType: 'DID_RENEW'
     }),
     () => storeKit.getNotificationHistory({
-      startDate: 1,
-      endDate: 2,
+      ...validDateRange,
       notificationSubtype: 'BILLING_RECOVERY'
     }),
     () => storeKit.getNotificationHistory({
-      startDate: 1,
-      endDate: 2,
+      ...validDateRange,
       transactionId: '   '
     }),
     () => storeKit.getNotificationHistory({
-      startDate: 1,
-      endDate: 2,
+      ...validDateRange,
       onlyFailures: 'true'
     }),
     () => storeKit.getAllNotificationHistory({
-      startDate: 2,
-      endDate: 2,
+      startDate: now,
+      endDate: now,
       transactionId: 'transaction'
     })
   ];
@@ -147,13 +144,55 @@ test('notification history validates required and mutually exclusive fields befo
   }
 
   const iterator = storeKit.iterateNotificationHistoryPages({
-    startDate: 1,
-    endDate: 2,
+    ...validDateRange,
     transactionId: 'transaction',
     notificationType: 'DID_RENEW'
   });
   await assert.rejects(() => iterator.next());
   assert.equal(calls.length, 1, 'invalid notification requests must not reach the network');
+});
+
+test('notification history enforces the resolved environment retention window', async t => {
+  const calls = [];
+  const now = 1_800_000_000_000;
+  const day = 24 * 60 * 60 * 1_000;
+  t.mock.method(Date, 'now', () => now);
+  const storeKit = createStoreKit(calls);
+  const endDate = now + day; // Apple allows a future endDate and clamps it to now.
+
+  await storeKit.getNotificationHistory({ startDate: now - 180 * day, endDate });
+  await storeKit.getNotificationHistory(
+    { startDate: now - 30 * day, endDate },
+    undefined,
+    { environment: 'sandbox' }
+  );
+  await storeKit.getNotificationHistory({ startDate: now - 31 * day, endDate });
+  assert.equal(calls.length, 3);
+  assert.ok(calls[0].url.startsWith('https://api.storekit.apple.com/'));
+  assert.ok(calls[1].url.startsWith('https://api.storekit-sandbox.apple.com/'));
+
+  await assert.rejects(
+    () => storeKit.getNotificationHistory({ startDate: now - 180 * day - 1, endDate }),
+    /past 180 days in production/
+  );
+  await assert.rejects(
+    () => storeKit.getNotificationHistory(
+      { startDate: now - 30 * day - 1, endDate },
+      undefined,
+      { environment: 'sandbox' }
+    ),
+    /past 30 days in sandbox/
+  );
+  await assert.rejects(
+    () => storeKit.getNotificationHistory({ startDate: now + 1, endDate }),
+    /past 180 days in production/
+  );
+  const pages = storeKit.iterateNotificationHistoryPages(
+    { startDate: now - 30 * day - 1, endDate },
+    { environment: 'sandbox' }
+  );
+  await assert.rejects(() => pages.next(), /past 30 days in sandbox/);
+  assert.equal(calls.length, 3, 'out-of-window requests must not reach history endpoint');
 });
 
 test('retention messaging accepts documented boundaries and preserves the request body', async () => {

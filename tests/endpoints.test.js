@@ -152,7 +152,7 @@ test('subscription, notification, and renewal extension endpoints are wired', as
     return { status: 200, data: { complete: true } };
   });
   await storeKit.getAllSubscriptionStatuses('transaction', [1, 3]);
-  await storeKit.getNotificationHistory({ startDate: 1, endDate: 2 });
+  await storeKit.getNotificationHistory({ startDate: Date.now() - 60_000, endDate: Date.now() });
   await storeKit.requestTestNotification();
   await storeKit.getTestNotificationStatus('test-token');
   await storeKit.extendSubscriptionRenewalDate('original-transaction', {
