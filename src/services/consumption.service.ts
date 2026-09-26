@@ -16,7 +16,7 @@ import {
   UserStatus
 } from '../interfaces';
 import { createStoreKitClient, StoreKitClient } from './base.service';
-import { encodePathSegment, requireUuid } from './validation';
+import { encodePathSegment, pickRequestControlOptions, requireUuid } from './validation';
 
 export class ConsumptionService {
   private readonly client: StoreKitClient;
@@ -125,12 +125,19 @@ export class ConsumptionService {
       requestBody.refundPreference = consumptionRequest.refundPreference;
     }
 
-    const environment = await this.client.resolveTransactionEnvironment(transactionId, control);
+    const environment = await this.client.resolveTransactionEnvironment(
+      transactionId,
+      pickRequestControlOptions(control)
+    );
     await this.client.makeRequest(
       'put',
       `/inApps/v1/transactions/consumption/${encodedTransactionId}`,
       requestBody,
-      { environment, retry: true, ...control }
+      {
+        environment,
+        retry: true,
+        ...pickRequestControlOptions(control)
+      }
     );
   }
 
@@ -199,13 +206,20 @@ export class ConsumptionService {
       requestBody.refundPreference = consumptionRequest.refundPreference;
     }
 
-    const environment = await this.client.resolveTransactionEnvironment(transactionId, control);
+    const environment = await this.client.resolveTransactionEnvironment(
+      transactionId,
+      pickRequestControlOptions(control)
+    );
     const encodedTransactionId = encodePathSegment(transactionId, 'transactionId');
     const response = await this.client.makeRequestWithEnvironment<void>(
       'put',
       `/inApps/v2/transactions/consumption/${encodedTransactionId}`,
       requestBody,
-      { environment, retry: true, ...control }
+      {
+        environment,
+        retry: true,
+        ...pickRequestControlOptions(control)
+      }
     );
 
     return {

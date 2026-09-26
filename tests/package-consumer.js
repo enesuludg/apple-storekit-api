@@ -13,6 +13,7 @@ const path = require('node:path');
 
 const packageName = 'apple-storekit-api';
 const repositoryRoot = path.resolve(__dirname, '..');
+const packageVersion = require(path.join(repositoryRoot, 'package.json')).version;
 const temporaryRoot = mkdtempSync(path.join(tmpdir(), `${packageName}-consumer-`));
 const consumerRoot = path.join(temporaryRoot, 'consumer');
 const legacyRuntimeSubpaths = [
@@ -79,7 +80,7 @@ assert.equal(typeof packageRoot.AppleStoreKit, 'function');
 for (const subpath of ${JSON.stringify(legacyRuntimeSubpaths)}) {
   assert.doesNotThrow(() => require(\`${packageName}/\${subpath}\`), subpath);
 }
-assert.equal(require('${packageName}/package.json').version, '2.0.0');
+assert.equal(require('${packageName}/package.json').version, '${packageVersion}');
 `;
   writeFileSync(path.join(consumerRoot, 'consumer.cjs'), commonJsConsumer);
   run(process.execPath, ['consumer.cjs']);
@@ -140,8 +141,8 @@ void decoded;
     path.join(consumerRoot, 'node_modules', packageName, 'package.json'),
     'utf8'
   ));
-  if (installedPackage.version !== '2.0.0') {
-    throw new Error(`Expected package version 2.0.0, received ${installedPackage.version}.`);
+  if (installedPackage.version !== packageVersion) {
+    throw new Error(`Expected package version ${packageVersion}, received ${installedPackage.version}.`);
   }
 
   console.log('Tarball consumer checks passed for CJS, ESM, TypeScript 5.2, and current TypeScript.');

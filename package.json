@@ -1,6 +1,6 @@
 {
   "name": "apple-storekit-api",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Apple StoreKit 2 Server API - Verify purchases, manage subscriptions, handle refunds, and process In-App Purchases with TypeScript support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -156,6 +156,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "prebuild": "node scripts/clean-dist.js",
     "build": "tsc",
     "prepare": "npm run build",
     "dev": "ts-node examples/example.ts",
@@ -165,8 +166,9 @@
     "test": "npm run build && npm run typecheck && npm run typecheck:package && node --test tests/*.test.js",
     "test:package": "npm run build && node tests/package-consumer.js",
     "test:coverage": "npm run build && npm run typecheck && npm run typecheck:package && node --experimental-test-coverage --test-coverage-lines=75 --test-coverage-branches=70 --test-coverage-functions=75 --test tests/*.test.js",
-    "check:package": "npm run build && publint && npm pack --dry-run --ignore-scripts",
-    "prepack": "npm test",
+    "check:package": "npm run build && publint && npm run verify:package",
+    "verify:package": "node scripts/verify-package.js",
+    "prepack": "npm test && npm run verify:package",
     "audit:prod": "npm audit --omit=dev"
   },
   "keywords": [

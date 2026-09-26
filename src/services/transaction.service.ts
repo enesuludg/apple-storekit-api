@@ -23,6 +23,7 @@ import {
 } from './pagination';
 import {
   encodePathSegment,
+  pickRequestControlOptions,
   requireNonEmptyString,
   requireUuid,
   validateDateRange
@@ -44,7 +45,10 @@ export class TransactionService {
       'get',
       `/inApps/v1/transactions/${encodedTransactionId}`,
       undefined,
-      { allowEnvironmentFallback: true, ...control }
+      {
+        allowEnvironmentFallback: true,
+        ...pickRequestControlOptions(control)
+      }
     );
     requireNonEmptyString(response.data.signedTransactionInfo, 'signedTransactionInfo');
     return this.client.verifyAndDecodeTransaction(
@@ -78,9 +82,13 @@ export class TransactionService {
       'get',
       `/inApps/v2/history/${encodedTransactionId}`,
       undefined,
-      environment
-        ? { environment, query, ...control }
-        : { allowEnvironmentFallback: true, query, ...control }
+      environment !== undefined
+        ? { environment, query, ...pickRequestControlOptions(control) }
+        : {
+          allowEnvironmentFallback: true,
+          query,
+          ...pickRequestControlOptions(control)
+        }
     );
     this.validatePaginatedTransactions(result.data, 'transaction history');
     return result;
@@ -161,16 +169,28 @@ export class TransactionService {
   ): Promise<LookupOrderResponse> {
     const encodedOrderId = encodePathSegment(orderId, 'orderId');
     // Look Up Order ID isn't available in sandbox, so never auto-fallback.
-    const response = await this.client.makeRequest<{ status: number; signedTransactions: string[] }>(
+    const response = await this.client.makeRequest<{ status: number; signedTransactions?: string[] }>(
       'get',
       `/inApps/v1/lookup/${encodedOrderId}`,
       undefined,
-      { environment: 'production', ...control }
+      { environment: 'production', ...pickRequestControlOptions(control) }
     );
-    if (!Number.isInteger(response.status)) {
-      throw new TypeError('Apple order lookup response is missing a valid status.');
+    if (response.status !== 0 && response.status !== 1) {
+      throw new TypeError('Apple order lookup response status must be 0 or 1.');
+    }
+    if (response.status === 1) {
+      if (response.signedTransactions !== undefined) {
+        this.requireSignedTransactions(response.signedTransactions, 'order lookup');
+        if (response.signedTransactions.length > 0) {
+          throw new TypeError('Apple invalid order lookup response must not contain transactions.');
+        }
+      }
+      return { status: response.status, transactions: [], signedTransactions: [] };
     }
     this.requireSignedTransactions(response.signedTransactions, 'order lookup');
+    if (response.signedTransactions.length === 0) {
+      throw new TypeError('Apple valid order lookup response has no signedTransactions.');
+    }
 
     const transactions = await Promise.all(
       response.signedTransactions.map(jwt =>
@@ -195,9 +215,17 @@ export class TransactionService {
       'get',
       `/inApps/v2/refund/lookup/${encodedTransactionId}`,
       undefined,
-      environment
-        ? { environment, query: { revision }, ...control }
-        : { allowEnvironmentFallback: true, query: { revision }, ...control }
+      environment !== undefined
+        ? {
+          environment,
+          query: { revision },
+          ...pickRequestControlOptions(control)
+        }
+        : {
+          allowEnvironmentFallback: true,
+          query: { revision },
+          ...pickRequestControlOptions(control)
+        }
     );
     this.validatePaginatedTransactions(result.data, 'refund history');
     return result;
@@ -285,7 +313,10 @@ export class TransactionService {
       'get',
       `/inApps/v1/transactions/appTransactions/${encodedTransactionId}`,
       undefined,
-      { allowEnvironmentFallback: true, ...control }
+      {
+        allowEnvironmentFallback: true,
+        ...pickRequestControlOptions(control)
+      }
     );
     requireNonEmptyString(response.signedAppTransactionInfo, 'signedAppTransactionInfo');
     return response;
@@ -300,7 +331,10 @@ export class TransactionService {
       'get',
       `/inApps/v1/transactions/appTransactions/${encodedTransactionId}`,
       undefined,
-      { allowEnvironmentFallback: true, ...control }
+      {
+        allowEnvironmentFallback: true,
+        ...pickRequestControlOptions(control)
+      }
     );
     requireNonEmptyString(
       result.data.signedAppTransactionInfo,
@@ -316,13 +350,20 @@ export class TransactionService {
     transactionId: string,
     control: StoreKitRequestControlOptions = {}
   ): Promise<void> {
-    const environment = await this.client.resolveTransactionEnvironment(transactionId, control);
+    const environment = await this.client.resolveTransactionEnvironment(
+      transactionId,
+      pickRequestControlOptions(control)
+    );
     const encodedTransactionId = encodePathSegment(transactionId, 'transactionId');
     await this.client.makeRequest<void>(
       'post',
       `/inApps/v1/transactions/${encodedTransactionId}/finish`,
       undefined,
-      { environment, retry: false, ...control }
+      {
+        environment,
+        retry: false,
+        ...pickRequestControlOptions(control)
+      }
     );
   }
 
@@ -346,7 +387,7 @@ export class TransactionService {
 
     const environment = await this.client.resolveTransactionEnvironment(
       originalTransactionId,
-      control
+      pickRequestControlOptions(control)
     );
     const encodedTransactionId = encodePathSegment(
       originalTransactionId,
@@ -356,7 +397,11 @@ export class TransactionService {
       'put',
       `/inApps/v1/transactions/${encodedTransactionId}/appAccountToken`,
       requestBody,
-      { environment, retry: true, ...control }
+      {
+        environment,
+        retry: true,
+        ...pickRequestControlOptions(control)
+      }
     );
   }
 
@@ -370,23 +415,23 @@ export class TransactionService {
       throw new RangeError('date must not be in the future.');
     }
     const diffTime = now - timestamp;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (diffDays < 3) {
+    const millisecondsPerDay = 1000 * 60 * 60 * 24;
+    if (diffTime < 3 * millisecondsPerDay) {
       return AccountTenure.DAYS_0_3;
     }
-    if (diffDays < 10) {
+    if (diffTime < 10 * millisecondsPerDay) {
       return AccountTenure.DAYS_3_10;
     }
-    if (diffDays < 30) {
+    if (diffTime < 30 * millisecondsPerDay) {
       return AccountTenure.DAYS_10_30;
     }
-    if (diffDays < 90) {
+    if (diffTime < 90 * millisecondsPerDay) {
       return AccountTenure.DAYS_30_90;
     }
-    if (diffDays < 180) {
+    if (diffTime < 180 * millisecondsPerDay) {
       return AccountTenure.DAYS_90_180;
     }
-    if (diffDays < 365) {
+    if (diffTime < 365 * millisecondsPerDay) {
       return AccountTenure.DAYS_180_365;
     }
     return AccountTenure.DAYS_OVER_365;

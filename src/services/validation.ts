@@ -1,3 +1,19 @@
+import type { StoreKitRequestControlOptions } from '../interfaces';
+
+/** Copy only supported request controls, without adding absent optional fields. */
+export function pickRequestControlOptions(
+  control: StoreKitRequestControlOptions
+): StoreKitRequestControlOptions {
+  const picked: StoreKitRequestControlOptions = {};
+  if (control?.signal !== undefined) {
+    picked.signal = control.signal;
+  }
+  if (control?.timeoutMs !== undefined) {
+    picked.timeoutMs = control.timeoutMs;
+  }
+  return picked;
+}
+
 export function encodePathSegment(value: string, name: string): string {
   requireNonEmptyString(value, name);
   return encodeURIComponent(value);
@@ -37,8 +53,8 @@ export function validateDateRange(
       throw new RangeError(`${name} ${field} must be a non-negative millisecond timestamp.`);
     }
   }
-  if (startDate !== undefined && endDate !== undefined && startDate > endDate) {
-    throw new RangeError(`${name} startDate must not be later than endDate.`);
+  if (startDate !== undefined && endDate !== undefined && startDate >= endDate) {
+    throw new RangeError(`${name} startDate must be earlier than endDate.`);
   }
 }
 
@@ -51,9 +67,6 @@ export function validateRequiredDateRange(
     throw new TypeError(`${name} requires both startDate and endDate.`);
   }
   validateDateRange(startDate, endDate, name);
-  if (startDate >= endDate) {
-    throw new RangeError(`${name} startDate must be earlier than endDate.`);
-  }
 }
 
 export function requireHttpsUrl(value: string, name: string): void {

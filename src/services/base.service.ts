@@ -2,6 +2,7 @@ import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import {
   AppTransaction,
+  DecodedRealtimeRequestBody,
   Environment,
   JWSRenewalInfoDecodedPayload,
   JWSTransactionDecodedPayload,
@@ -20,7 +21,11 @@ import {
   StoreKitRequestOptions,
   StoreKitRequestResult
 } from '../interfaces';
-import { encodePathSegment, requireNonEmptyString } from './validation';
+import {
+  encodePathSegment,
+  pickRequestControlOptions,
+  requireNonEmptyString
+} from './validation';
 
 type HttpMethod = 'delete' | 'get' | 'post' | 'put';
 const RETRYABLE_NETWORK_CODES = new Set([
@@ -31,6 +36,7 @@ const RETRYABLE_NETWORK_CODES = new Set([
   'ETIMEDOUT'
 ]);
 const RETRYABLE_HTTP_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const RETRYABLE_APPLE_ERROR_CODES = new Set([4040002, 4040004, 4040006, 5000001]);
 const UNSAFE_ENDPOINT_CHARACTERS = /[\\\u0000-\u001f\u007f]/;
 const SENSITIVE_DIAGNOSTIC_KEY =
   /authorization|cookie|credential|password|private.?key|secret|signature|token/i;
@@ -39,6 +45,12 @@ const JWT_CREDENTIAL = /\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{
 const MAX_DIAGNOSTIC_DEPTH = 4;
 const MAX_DIAGNOSTIC_ENTRIES = 50;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+function assertStoreEnvironment(environment: unknown): asserts environment is StoreEnvironment {
+  if (environment !== 'production' && environment !== 'sandbox') {
+    throw new TypeError('environment must be production or sandbox.');
+  }
+}
 
 function redactDiagnosticString(value: string): string {
   return value
@@ -301,6 +313,11 @@ export interface StoreKitClient {
     signedData: string,
     environment: StoreEnvironment
   ): Promise<AppTransaction>;
+  /** Optional to preserve existing custom StoreKitClient implementations. */
+  verifyAndDecodeRealtimeRequest?(
+    signedPayload: string,
+    environment: StoreEnvironment
+  ): Promise<DecodedRealtimeRequestBody>;
 }
 
 export function createStoreKitClient(
@@ -332,18 +349,31 @@ export class BaseService implements StoreKitClient {
 
   constructor(config: AppleStoreKitConfig) {
     this.validateConfig(config);
-    this.config = config;
-    this.privateKeyContent = this.loadPrivateKey(config.privateKey);
-    this.httpClient = config.httpClient || axios.create({
+    this.config = Object.freeze({
+      ...config,
+      appleRootCertificates: config.appleRootCertificates
+        ? Object.freeze(config.appleRootCertificates.map(certificate =>
+          Buffer.isBuffer(certificate) ? Buffer.from(certificate) : certificate
+        ))
+        : undefined
+    });
+    this.privateKeyContent = this.loadPrivateKey(this.config.privateKey);
+    this.httpClient = this.config.httpClient || axios.create({
       httpsAgent: new HttpsAgent({ keepAlive: true }),
       maxRedirects: 0
     });
   }
 
   protected getBaseUrl(environment: StoreEnvironment): string {
-    return environment === 'sandbox'
-      ? 'https://api.storekit-sandbox.apple.com'
-      : 'https://api.storekit.apple.com';
+    switch (environment) {
+      case 'sandbox':
+        return 'https://api.storekit-sandbox.apple.com';
+      case 'production':
+        return 'https://api.storekit.apple.com';
+      default:
+        assertStoreEnvironment(environment);
+        throw new TypeError('environment must be production or sandbox.');
+    }
   }
 
   protected loadPrivateKey(privateKey: string): string {
@@ -455,6 +485,24 @@ export class BaseService implements StoreKitClient {
     );
   }
 
+  async verifyAndDecodeRealtimeRequest(
+    signedPayload: string,
+    environment: StoreEnvironment
+  ): Promise<DecodedRealtimeRequestBody> {
+    return this.verifySignedData(
+      environment,
+      verifier => {
+        if (!verifier.verifyAndDecodeRealtimeRequest) {
+          throw new TypeError(
+            'The configured signed data verifier does not support retention realtime requests.'
+          );
+        }
+        return verifier.verifyAndDecodeRealtimeRequest(signedPayload);
+      },
+      'retention realtime request'
+    );
+  }
+
   /**
    * @deprecated Use verifyAndDecodeTransaction() and pass the request environment.
    * This method now verifies the JWS and is therefore asynchronous.
@@ -463,8 +511,10 @@ export class BaseService implements StoreKitClient {
     signedData: string,
     environment?: StoreEnvironment
   ): Promise<JWSTransactionDecodedPayload> {
-    const resolvedEnvironment = environment || this.config.environment;
-    if (!resolvedEnvironment) {
+    const resolvedEnvironment = environment === undefined
+      ? this.config.environment
+      : environment;
+    if (resolvedEnvironment === undefined) {
       throw new Error(
         'Signed data verification requires an explicit environment when the client uses auto mode.'
       );
@@ -478,6 +528,7 @@ export class BaseService implements StoreKitClient {
     operation: (verifier: StoreKitSignedDataVerifier) => Promise<T>,
     dataType: string
   ): Promise<T> {
+    assertStoreEnvironment(environment);
     try {
       return await operation(this.getSignedDataVerifier(environment));
     } catch (error) {
@@ -562,9 +613,12 @@ export class BaseService implements StoreKitClient {
     data?: unknown,
     options: StoreKitRequestOptions = {}
   ): Promise<StoreKitRequestResult<T>> {
-    const fixedEnvironment = options.environment || this.config.environment;
+    const fixedEnvironment = options.environment === undefined
+      ? this.config.environment
+      : options.environment;
 
-    if (fixedEnvironment) {
+    if (fixedEnvironment !== undefined) {
+      assertStoreEnvironment(fixedEnvironment);
       try {
         return await this.requestInEnvironment<T>(fixedEnvironment, method, endpoint, data, options);
       } catch (error) {
@@ -624,7 +678,10 @@ export class BaseService implements StoreKitClient {
       'get',
       `/inApps/v1/transactions/${encodedTransactionId}`,
       undefined,
-      { allowEnvironmentFallback: true, ...control }
+      {
+        allowEnvironmentFallback: true,
+        ...pickRequestControlOptions(control)
+      }
     );
 
     return result.environment;
@@ -638,12 +695,15 @@ export class BaseService implements StoreKitClient {
     explicitEnvironment: StoreEnvironment | undefined,
     operation: string
   ): StoreEnvironment {
-    const environment = explicitEnvironment || this.config.environment;
-    if (!environment) {
+    const environment = explicitEnvironment === undefined
+      ? this.config.environment
+      : explicitEnvironment;
+    if (environment === undefined) {
       throw new Error(
         `An explicit environment is required for ${operation} when the client uses auto mode.`
       );
     }
+    assertStoreEnvironment(environment);
     return environment;
   }
 
@@ -710,22 +770,11 @@ export class BaseService implements StoreKitClient {
   }
 
   private getRetryDelay(error: unknown, attempt: number): number | null {
-    if (!axios.isAxiosError(error)) {
+    if (!axios.isAxiosError(error) || !this.isRetryableError(error)) {
       return null;
     }
 
     const status = error.response?.status;
-    const errorCode = toFiniteNumber(error.response?.data?.errorCode);
-    const isRetryableNetworkError = !error.response &&
-      RETRYABLE_NETWORK_CODES.has(error.code || '');
-    const isRetryable =
-      isRetryableNetworkError ||
-      (status !== undefined && RETRYABLE_HTTP_STATUS_CODES.has(status)) ||
-      errorCode === 5000001;
-
-    if (!isRetryable) {
-      return null;
-    }
 
     const maxDelay = this.normalizeNonNegativeInteger(this.config.maxRetryDelayMs, 5000);
     const retryAfterMs = status === 429 ? this.getRetryAfterMs(error) : undefined;
@@ -874,7 +923,7 @@ export class BaseService implements StoreKitClient {
     const errorCode = toFiniteNumber(error.response?.data?.errorCode);
     return (!error.response && RETRYABLE_NETWORK_CODES.has(error.code || '')) ||
       (status !== undefined && RETRYABLE_HTTP_STATUS_CODES.has(status)) ||
-      errorCode === 5000001;
+      (errorCode !== undefined && RETRYABLE_APPLE_ERROR_CODES.has(errorCode));
   }
 
   private validateConfig(config: AppleStoreKitConfig): void {
@@ -883,10 +932,8 @@ export class BaseService implements StoreKitClient {
     requireNonEmptyString(config.privateKey, 'privateKey');
     requireNonEmptyString(config.bundleId, 'bundleId');
 
-    if (config.environment !== undefined &&
-      config.environment !== 'production' &&
-      config.environment !== 'sandbox') {
-      throw new TypeError('environment must be production or sandbox.');
+    if (config.environment !== undefined) {
+      assertStoreEnvironment(config.environment);
     }
     if (config.appAppleId !== undefined &&
       (!Number.isSafeInteger(config.appAppleId) || config.appAppleId <= 0)) {

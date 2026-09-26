@@ -3,6 +3,25 @@
 This document summarizes notable releases and migration requirements for
 `apple-storekit-api`.
 
+## 2.1.0 — unreleased
+
+- Reject unknown environment values at runtime so malformed configuration cannot
+  route requests to production. Snapshot validated configuration at construction,
+  and prevent extra JavaScript control fields from overriding a resolved environment
+  or retry policy.
+- Handle Apple's `lookupOrder()` status `1` response without signed transactions.
+- Retry Apple's transient `4040002`, `4040004`, and `4040006` errors within the
+  existing retry bounds.
+- Require transaction-history `startDate` to precede `endDate`, classify account
+  tenure using exact elapsed time, and validate notification-history retention
+  windows for each environment without interrupting accepted paginated queries.
+- Add `verifyAndDecodeRealtimeRequest()` for signed Retention Messaging realtime
+  requests.
+- Clean `dist` before every build and reject unexpected or missing tarball files
+  and credential patterns before packing, preventing stale examples from shipping.
+- Compile the primary README TypeScript example with strict types and document
+  Apple-specific consumption percentage rules for auto-renewable subscriptions.
+
 ## 2.0.0 — 2026-07-13
 
 This release is a major security and reliability update. It adds cryptographic

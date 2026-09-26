@@ -1,5 +1,6 @@
 import type {
   AppTransaction,
+  DecodedRealtimeRequestBody,
   JWSRenewalInfoDecodedPayload,
   ResponseBodyV2DecodedPayload
 } from '@apple/app-store-server-library';
@@ -108,6 +109,14 @@ export class AppleStoreKit {
     environment: StoreEnvironment
   ): Promise<ResponseBodyV2DecodedPayload> {
     return this.client.verifyAndDecodeNotification(signedData, environment);
+  }
+
+  /** Verify an Apple signed Retention Messaging real-time request. */
+  verifyAndDecodeRealtimeRequest(
+    signedPayload: string,
+    environment: StoreEnvironment
+  ): Promise<DecodedRealtimeRequestBody> {
+    return this.client.verifyAndDecodeRealtimeRequest(signedPayload, environment);
   }
 
   verifyAndDecodeAppTransaction(

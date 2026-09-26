@@ -35,6 +35,12 @@ async function consumerUsage(): Promise<void> {
   );
   decoded.transactionId?.toString();
 
+  const realtime = await client.verifyAndDecodeRealtimeRequest(
+    'signed-retention-request',
+    'sandbox'
+  );
+  realtime.requestIdentifier.toUpperCase();
+
   for await (const item of client.iterateTransactionHistory(
     'transaction-id',
     {},

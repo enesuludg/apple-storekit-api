@@ -11,6 +11,7 @@ import {
 import { createStoreKitClient, StoreKitClient } from './base.service';
 import {
   encodePathSegment,
+  pickRequestControlOptions,
   requireNonEmptyString,
   requireStringMaxLength,
   requireUuid
@@ -31,7 +32,7 @@ export class RenewalService {
     this.validateExtendRequest(request, false);
     const environment = await this.client.resolveTransactionEnvironment(
       originalTransactionId,
-      control
+      pickRequestControlOptions(control)
     );
     const encodedTransactionId = encodePathSegment(
       originalTransactionId,
@@ -41,7 +42,11 @@ export class RenewalService {
       'put',
       `/inApps/v1/subscriptions/extend/${encodedTransactionId}`,
       request,
-      { environment, retry: true, ...control }
+      {
+        environment,
+        retry: true,
+        ...pickRequestControlOptions(control)
+      }
     );
   }
 

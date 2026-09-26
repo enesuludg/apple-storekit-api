@@ -69,7 +69,7 @@ service-level API; new code should import from `apple-storekit-api`.
 ## Usage
 
 ```typescript
-import { AppleStoreKit } from 'apple-storekit-api';
+import { AppleStoreKit, type AppleStoreKitConfig } from 'apple-storekit-api';
 import { readFileSync } from 'node:fs';
 
 const appleRootCertificates = [
@@ -84,7 +84,7 @@ const configWithPath = {
   bundleId: 'com.yourcompany.yourapp',
   appleRootCertificates,
   environment: 'sandbox' // or 'production'
-};
+} satisfies AppleStoreKitConfig;
 
 // Example with key content
 const configWithContent = {
@@ -94,7 +94,7 @@ const configWithContent = {
   bundleId: 'com.yourcompany.yourapp',
   appleRootCertificates,
   environment: 'sandbox' // or 'production'
-};
+} satisfies AppleStoreKitConfig;
 
 // Example with environment variables (recommended for production)
 const configWithEnv = {
@@ -108,7 +108,7 @@ const configWithEnv = {
   // Apple returns 4040010 (TransactionIdNotFoundError).
   maxRetries: 2,
   timeoutMs: 10_000
-};
+} satisfies AppleStoreKitConfig;
 
 const storeKit = new AppleStoreKit(configWithPath); // or configWithContent or configWithEnv
 
@@ -219,6 +219,7 @@ The library supports automatic environment detection:
    };
    ```
    - Explicitly sets the environment
+   - Values other than `'production'` or `'sandbox'` are rejected at runtime
    - No automatic switching
    - Recommended for production use
 
@@ -226,7 +227,7 @@ The library supports automatic environment detection:
 
 Retries always stay in the same environment:
 
-- Selected transient network errors and HTTP `408`, `429`, `500`, `502`, `503`, and `504` use bounded exponential backoff
+- Selected transient network errors, HTTP `408`, `429`, `500`, `502`, `503`, and `504`, and Apple's retryable `4040002`, `4040004`, and `4040006` errors use bounded exponential backoff
 - HTTP `429` honors Apple's `Retry-After` value when it is within `maxRetryDelayMs`
 - HTTP `400`, `401`, `403`, and other non-retryable responses fail immediately
 - GET requests retry by default; write endpoints opt in only when their semantics are idempotent
@@ -325,6 +326,10 @@ const notifications = await storeKit.getAllNotificationHistory(
 );
 ```
 
+The history window is limited to the past 180 days in production and 30 days in
+sandbox. Keep `startDate` before `endDate` and inside the selected environment's
+window.
+
 ### Retention Messaging
 
 Image endpoints:
@@ -350,6 +355,9 @@ Realtime URL and sandbox performance-test endpoints:
 - `initiatePerformanceTest(request)`
 - `getPerformanceTestResults(requestId)`
 
+Use `verifyAndDecodeRealtimeRequest()` to verify and decode signed realtime
+requests received at your configured URL before processing their payloads.
+
 Performance tests always use Apple's sandbox environment. Image uploads use
 `image/png`. `FULL_SIZE` images must be 3840 pixels wide and 160–2160 pixels high;
 `BULLET_POINT` images must be 1024×1024. Transparent PNGs are rejected before upload.
@@ -368,6 +376,12 @@ must be `0` for an undelivered item. When `refundPreference` is `GRANT_PRORATED`
 a percentage is provided, it must be greater than `0` and less than `100000`. Only
 these five fields are sent to Apple's V2 endpoint.
 
+For an **auto-renewable subscription**, omit `consumptionPercentage` entirely.
+Apple calculates the consumed portion and rejects a supplied percentage with HTTP
+400 (`ConsumptionPercentageAutoRenewableSubscriptionError`). The example below
+with `consumptionPercentage` is for a consumable, non-consumable, or non-renewing
+subscription. See [Apple's consumption percentage rules](https://developer.apple.com/documentation/appstoreserverapi/consumptionpercentage).
+
 ```typescript
 import {
   ConsumptionRequest,
@@ -384,6 +398,19 @@ const consumptionData: ConsumptionRequest = {
 };
 
 await storeKit.sendConsumptionInformationV2('transactionId', consumptionData);
+```
+
+For an auto-renewable subscription:
+
+```typescript
+const subscriptionConsumption: ConsumptionRequest = {
+  customerConsented: true,
+  deliveryStatus: DeliveryStatus.DELIVERED,
+  sampleContentProvided: true,
+  refundPreference: RefundPreference.GRANT_PRORATED
+};
+
+await storeKit.sendConsumptionInformationV2('subscription-transaction-id', subscriptionConsumption);
 ```
 
 The deprecated V1 endpoint has a different request schema and numeric enums. The
@@ -475,7 +502,7 @@ try {
   );
   console.log('App account token updated successfully');
 } catch (error) {
-  console.error('Failed to update app account token:', error.message);
+  console.error('Failed to update app account token:', error instanceof Error ? error.message : error);
 }
 ```
 
@@ -492,7 +519,7 @@ The library includes comprehensive error handling for API responses. All methods
 try {
   const status = await storeKit.getSubscriptionStatus('originalTransactionId');
 } catch (error) {
-  console.error('StoreKit API Error:', error.message);
+  console.error('StoreKit API Error:', error instanceof Error ? error.message : error);
 }
 ```
 
